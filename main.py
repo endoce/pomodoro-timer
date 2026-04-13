@@ -15,7 +15,26 @@ DEFAULT_CONFIG = {
     "window_title": "Pomodoro Timer",
     "work_seconds": 30,
     "break_seconds": 10,
+    "auto_start_break": True,
+    "auto_start_work": False,
 }
+
+
+def parse_bool(value, default):
+    # Accept true/false values safely from config.json.
+    if isinstance(value, bool):
+        return value
+
+    # Also accept common text values so config edits are beginner-friendly.
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("true", "1", "yes", "on"):
+            return True
+        if normalized in ("false", "0", "no", "off"):
+            return False
+
+    # Any unexpected value falls back to the provided default.
+    return default
 
 
 def load_config():
@@ -41,6 +60,14 @@ def load_config():
         config_data["break_seconds"] = int(
             loaded_data.get("break_seconds", DEFAULT_CONFIG["break_seconds"])
         )
+        config_data["auto_start_break"] = parse_bool(
+            loaded_data.get("auto_start_break", DEFAULT_CONFIG["auto_start_break"]),
+            DEFAULT_CONFIG["auto_start_break"],
+        )
+        config_data["auto_start_work"] = parse_bool(
+            loaded_data.get("auto_start_work", DEFAULT_CONFIG["auto_start_work"]),
+            DEFAULT_CONFIG["auto_start_work"],
+        )
     except (json.JSONDecodeError, OSError, TypeError, ValueError):
         # Invalid or unreadable config should not crash the app.
         return DEFAULT_CONFIG.copy()
@@ -56,6 +83,8 @@ class PomodoroApp:
         self.window_title = self.config_data["window_title"]
         self.work_seconds = self.config_data["work_seconds"]
         self.break_seconds = self.config_data["break_seconds"]
+        self.auto_start_break = self.config_data["auto_start_break"]
+        self.auto_start_work = self.config_data["auto_start_work"]
         self.root.title(self.window_title)
         # Increased height so timer, labels, and buttons are visible at startup.
         self.root.geometry("420x340")
@@ -254,9 +283,10 @@ class PomodoroApp:
         )
 
     def start_timer(self):
-        # Start has two behaviors:
+        # Start supports these flows:
         # 1) idle -> begin work mode
         # 2) paused -> resume whichever mode was paused
+        # 3) waiting work/break phase -> begin that phase
         if self.timer_job is not None:
             return
 
@@ -316,9 +346,7 @@ class PomodoroApp:
             self.update_display()
             self.timer_job = self.root.after(1000, self.countdown)
         else:
-            # Reaching 00:00 changes mode:
-            # work -> break (auto-start break)
-            # break -> idle (stop)
+            # Reaching 00:00 changes mode based on current phase and config.
             self.timer_job = None
             if self.mode == "work":
                 # Count only completed work sessions.
@@ -327,34 +355,49 @@ class PomodoroApp:
                 self.save_stats()
                 self.update_stats_display()
 
-                # Move into break mode and start break countdown immediately.
+                # Move into break mode and prepare full break duration.
                 self.mode = "break"
+                self.paused_mode = None
                 self.remaining_seconds = self.break_seconds
                 self.set_status()
                 self.update_display()
 
-                # Show one reminder right when work finishes.
-                # This branch runs only once per completed work session.
-                messagebox.showinfo(
-                    "Work Session Complete",
-                    "Great job! Your work session is complete. Break time has started."
-                )
-
-                self.countdown()
+                # Reminder message matches whether the break auto-starts.
+                if self.auto_start_break:
+                    messagebox.showinfo(
+                        "Work Session Complete",
+                        "Great job! Your work session is complete. Break time has started."
+                    )
+                    self.countdown()
+                else:
+                    messagebox.showinfo(
+                        "Work Session Complete",
+                        "Great job! Your work session is complete. Press Start when you are ready for your break."
+                    )
             elif self.mode == "break":
-                # Break is done, so return to idle with a full work timer ready.
-                self.mode = "idle"
-                self.paused_mode = None
-                self.remaining_seconds = self.work_seconds
-                self.update_display()
-                self.set_status()
-
-                # Show one reminder right when the break finishes.
-                # Pause and Reset do not call this branch, so they never show reminders.
-                messagebox.showinfo(
-                    "Break Complete",
-                    "Your break is complete. You are ready to start the next work session."
-                )
+                # Break completion never changes statistics.
+                if self.auto_start_work:
+                    self.mode = "work"
+                    self.paused_mode = None
+                    self.remaining_seconds = self.work_seconds
+                    self.set_status()
+                    self.update_display()
+                    messagebox.showinfo(
+                        "Break Complete",
+                        "Your break is complete. The next work session has started."
+                    )
+                    self.countdown()
+                else:
+                    # Return to idle with a fresh work timer waiting for Start.
+                    self.mode = "idle"
+                    self.paused_mode = None
+                    self.remaining_seconds = self.work_seconds
+                    self.update_display()
+                    self.set_status()
+                    messagebox.showinfo(
+                        "Break Complete",
+                        "Your break is complete. Press Start when you are ready for the next work session."
+                    )
 
 
 if __name__ == "__main__":
