@@ -9,13 +9,13 @@ class PomodoroApp:
         # Keep a reference to the main Tkinter window.
         self.root = root
         self.root.title("Pomodoro Timer")
-        self.root.geometry("300x200")
+        self.root.geometry("320x220")
 
         # remaining_seconds stores how much time is left in the session.
         self.remaining_seconds = TOTAL_SECONDS
 
         # timer_job stores the scheduled `after` callback id.
-        # It is None when the timer is not running.
+        # It is None when no countdown callback is currently scheduled.
         self.timer_job = None
 
         # Large label in the center that shows time like 25:00.
@@ -24,16 +24,38 @@ class PomodoroApp:
             text=self.format_time(self.remaining_seconds),
             font=("Arial", 32)
         )
-        self.time_label.pack(pady=30)
+        self.time_label.pack(pady=25)
 
-        # Start button to begin the countdown.
+        # Use one frame so the three control buttons stay on one row.
+        self.button_frame = tk.Frame(root)
+        self.button_frame.pack()
+
+        # Start begins or resumes the countdown.
         self.start_button = tk.Button(
-            root,
+            self.button_frame,
             text="Start",
             width=10,
             command=self.start_timer
         )
-        self.start_button.pack()
+        self.start_button.grid(row=0, column=0, padx=4)
+
+        # Pause stops the scheduled countdown callback with after_cancel.
+        self.pause_button = tk.Button(
+            self.button_frame,
+            text="Pause",
+            width=10,
+            command=self.pause_timer
+        )
+        self.pause_button.grid(row=0, column=1, padx=4)
+
+        # Reset stops any running timer and restores 25:00.
+        self.reset_button = tk.Button(
+            self.button_frame,
+            text="Reset",
+            width=10,
+            command=self.reset_timer
+        )
+        self.reset_button.grid(row=0, column=2, padx=4)
 
     def format_time(self, seconds):
         # Convert total seconds into MM:SS format.
@@ -46,12 +68,27 @@ class PomodoroApp:
         self.time_label.config(text=self.format_time(self.remaining_seconds))
 
     def start_timer(self):
-        # Start only once. If already running, do nothing.
-        if self.timer_job is None:
+        # Prevent parallel timers by starting only when no callback is scheduled.
+        if self.timer_job is None and self.remaining_seconds > 0:
             self.countdown()
 
+    def pause_timer(self):
+        # Pause by cancelling the next scheduled callback.
+        if self.timer_job is not None:
+            self.root.after_cancel(self.timer_job)
+            self.timer_job = None
+
+    def reset_timer(self):
+        # Reset should also stop a running timer before restoring initial time.
+        if self.timer_job is not None:
+            self.root.after_cancel(self.timer_job)
+            self.timer_job = None
+
+        self.remaining_seconds = TOTAL_SECONDS
+        self.update_display()
+
     def countdown(self):
-        # Decrease one second, update UI, and schedule the next tick.
+        # Keep the existing countdown flow: decrement, update display, schedule next tick.
         if self.remaining_seconds > 0:
             self.remaining_seconds -= 1
             self.update_display()

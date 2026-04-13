@@ -20,19 +20,19 @@ The target is to build a local timer app step by step, starting from the most ba
 
 ## Current Step
 
-Step 01: basic single-file window and countdown
+Step 02: single-file timer with Start / Pause / Reset
 
-## Current Implementation (Step 01)
+## Current Implementation (Step 02)
 
 - one Tkinter window
 - one large timer label
-- one **Start** button
+- **Start** button to start or resume
+- **Pause** button using `after_cancel`
+- **Reset** button restoring the timer to `25:00`
+- duplicate Start clicks do not create parallel timers
 - countdown from 25:00 to 00:00
-- duplicate Start clicks do not create faster countdown
 
 Not included in this step:
-- pause
-- reset
 - break mode
 - notifications
 - local file storage
