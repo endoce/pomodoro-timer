@@ -9,7 +9,7 @@ Build the most basic version of the pomodoro timer.
 This step only includes:
 - one Tkinter window
 - one large timer label
-- one Start button
+- one **Start** button
 - countdown from 25:00 to 00:00
 - prevent duplicate timer start
 
@@ -26,8 +26,8 @@ This step does not include:
 The step is complete when:
 1. `python main.py` starts successfully on Windows
 2. the window shows `25:00`
-3. clicking Start decreases the timer once per second
-4. repeated clicks on Start do not speed up the countdown
+3. clicking **Start** decreases the timer once per second
+4. repeated clicks on **Start** do not speed up the countdown
 5. the timer stops at `00:00`
 
 ## Notes
