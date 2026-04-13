@@ -26,6 +26,10 @@ class PomodoroApp:
         )
         self.time_label.pack(pady=25)
 
+        # Status label explains current timer state for beginners.
+        self.status_label = tk.Label(root, text="Status: Idle", font=("Arial", 12))
+        self.status_label.pack(pady=(0, 10))
+
         # Use one frame so the three control buttons stay on one row.
         self.button_frame = tk.Frame(root)
         self.button_frame.pack()
@@ -67,9 +71,14 @@ class PomodoroApp:
         # Refresh the label text using the latest remaining_seconds value.
         self.time_label.config(text=self.format_time(self.remaining_seconds))
 
+    def set_status(self, status_text):
+        # Keep status updates in one place for clarity.
+        self.status_label.config(text=f"Status: {status_text}")
+
     def start_timer(self):
         # Prevent parallel timers by starting only when no callback is scheduled.
         if self.timer_job is None and self.remaining_seconds > 0:
+            self.set_status("Running")
             self.countdown()
 
     def pause_timer(self):
@@ -77,6 +86,7 @@ class PomodoroApp:
         if self.timer_job is not None:
             self.root.after_cancel(self.timer_job)
             self.timer_job = None
+            self.set_status("Paused")
 
     def reset_timer(self):
         # Reset should also stop a running timer before restoring initial time.
@@ -86,6 +96,7 @@ class PomodoroApp:
 
         self.remaining_seconds = TOTAL_SECONDS
         self.update_display()
+        self.set_status("Idle")
 
     def countdown(self):
         # Keep the existing countdown flow: decrement, update display, schedule next tick.
@@ -96,6 +107,7 @@ class PomodoroApp:
         else:
             # Reaching 00:00 ends the timer loop.
             self.timer_job = None
+            self.set_status("Idle")
 
 
 if __name__ == "__main__":
