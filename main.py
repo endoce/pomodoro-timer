@@ -2,9 +2,6 @@ import tkinter as tk
 import json
 from pathlib import Path
 
-# Short durations so mode switching is easy to test.
-WORK_SECONDS = 30
-BREAK_SECONDS = 10
 BG_COLOR = "#F3FFF8"
 CARD_COLOR = "#FFFFFF"
 TIMER_COLOR = "#FF6F61"
@@ -12,13 +9,53 @@ STATUS_IDLE_COLOR = "#5C6F7B"
 STATUS_RUNNING_COLOR = "#2E9E5B"
 STATUS_PAUSED_COLOR = "#F39C3D"
 STATS_FILE = Path("stats.json")
+CONFIG_FILE = Path("config.json")
+DEFAULT_CONFIG = {
+    "window_title": "Pomodoro Timer",
+    "work_seconds": 30,
+    "break_seconds": 10,
+}
+
+
+def load_config():
+    # Start with safe defaults.
+    config_data = DEFAULT_CONFIG.copy()
+
+    # If config.json does not exist, keep defaults.
+    if not CONFIG_FILE.exists():
+        return config_data
+
+    try:
+        with CONFIG_FILE.open("r", encoding="utf-8") as file:
+            loaded_data = json.load(file)
+
+        # Merge known keys from the file.
+        # Any missing key falls back to DEFAULT_CONFIG.
+        config_data["window_title"] = str(
+            loaded_data.get("window_title", DEFAULT_CONFIG["window_title"])
+        )
+        config_data["work_seconds"] = int(
+            loaded_data.get("work_seconds", DEFAULT_CONFIG["work_seconds"])
+        )
+        config_data["break_seconds"] = int(
+            loaded_data.get("break_seconds", DEFAULT_CONFIG["break_seconds"])
+        )
+    except (json.JSONDecodeError, OSError, TypeError, ValueError):
+        # Invalid or unreadable config should not crash the app.
+        return DEFAULT_CONFIG.copy()
+
+    return config_data
 
 
 class PomodoroApp:
     def __init__(self, root):
         # Keep a reference to the main Tkinter window.
         self.root = root
-        self.root.title("Pomodoro Timer")
+        self.config_data = load_config()
+        self.window_title = self.config_data["window_title"]
+        self.work_seconds = self.config_data["work_seconds"]
+        self.break_seconds = self.config_data["break_seconds"]
+        self.root.title(self.window_title)
         # Increased height so timer, labels, and buttons are visible at startup.
         self.root.geometry("420x340")
         self.root.configure(bg=BG_COLOR)
@@ -32,7 +69,7 @@ class PomodoroApp:
         self.paused_mode = None
 
         # remaining_seconds stores how much time is left in the current mode.
-        self.remaining_seconds = WORK_SECONDS
+        self.remaining_seconds = self.work_seconds
 
         # timer_job stores the scheduled `after` callback id.
         # It is None when no countdown callback is currently scheduled.
@@ -208,7 +245,7 @@ class PomodoroApp:
 
         if self.mode == "idle":
             self.mode = "work"
-            self.remaining_seconds = WORK_SECONDS
+            self.remaining_seconds = self.work_seconds
         elif self.mode == "paused" and self.paused_mode in ("work", "break"):
             self.mode = self.paused_mode
 
@@ -233,7 +270,7 @@ class PomodoroApp:
 
         self.mode = "idle"
         self.paused_mode = None
-        self.remaining_seconds = WORK_SECONDS
+        self.remaining_seconds = self.work_seconds
         self.update_display()
         self.set_status()
 
@@ -251,19 +288,19 @@ class PomodoroApp:
             if self.mode == "work":
                 # Count only completed work sessions.
                 self.completed_sessions += 1
-                self.focus_seconds += WORK_SECONDS
+                self.focus_seconds += self.work_seconds
                 self.save_stats()
                 self.update_stats_display()
 
                 self.mode = "break"
-                self.remaining_seconds = BREAK_SECONDS
+                self.remaining_seconds = self.break_seconds
                 self.set_status()
                 self.update_display()
                 self.countdown()
             elif self.mode == "break":
                 self.mode = "idle"
                 self.paused_mode = None
-                self.remaining_seconds = WORK_SECONDS
+                self.remaining_seconds = self.work_seconds
                 self.update_display()
                 self.set_status()
 
