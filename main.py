@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import messagebox
 import json
 from pathlib import Path
 
@@ -292,17 +293,34 @@ class PomodoroApp:
                 self.save_stats()
                 self.update_stats_display()
 
+                # Move into break mode and start break countdown immediately.
                 self.mode = "break"
                 self.remaining_seconds = self.break_seconds
                 self.set_status()
                 self.update_display()
+
+                # Show one reminder right when work finishes.
+                # This branch runs only once per completed work session.
+                messagebox.showinfo(
+                    "Work Session Complete",
+                    "Great job! Your work session is complete. Break time has started."
+                )
+
                 self.countdown()
             elif self.mode == "break":
+                # Break is done, so return to idle with a full work timer ready.
                 self.mode = "idle"
                 self.paused_mode = None
                 self.remaining_seconds = self.work_seconds
                 self.update_display()
                 self.set_status()
+
+                # Show one reminder right when the break finishes.
+                # Pause and Reset do not call this branch, so they never show reminders.
+                messagebox.showinfo(
+                    "Break Complete",
+                    "Your break is complete. You are ready to start the next work session."
+                )
 
 
 if __name__ == "__main__":
