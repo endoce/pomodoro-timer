@@ -16,7 +16,8 @@ class PomodoroApp:
         # Keep a reference to the main Tkinter window.
         self.root = root
         self.root.title("Pomodoro Timer")
-        self.root.geometry("420x280")
+        # Increased height so timer, labels, and buttons are visible at startup.
+        self.root.geometry("420x340")
         self.root.configure(bg=BG_COLOR)
 
         # mode tracks the high-level app state.
