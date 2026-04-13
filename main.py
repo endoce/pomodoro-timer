@@ -92,6 +92,14 @@ def load_config():
             loaded_data.get("long_break_every", DEFAULT_CONFIG["long_break_every"]),
             DEFAULT_CONFIG["long_break_every"],
         )
+        config_data["auto_start_break"] = parse_bool(
+            loaded_data.get("auto_start_break", DEFAULT_CONFIG["auto_start_break"]),
+            DEFAULT_CONFIG["auto_start_break"],
+        )
+        config_data["auto_start_work"] = parse_bool(
+            loaded_data.get("auto_start_work", DEFAULT_CONFIG["auto_start_work"]),
+            DEFAULT_CONFIG["auto_start_work"],
+        )
     except (json.JSONDecodeError, OSError, TypeError, ValueError):
         # Invalid or unreadable config should not crash the app.
         return DEFAULT_CONFIG.copy()
