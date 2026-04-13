@@ -1,7 +1,8 @@
 import tkinter as tk
 
-# A single pomodoro session is 25 minutes.
-TOTAL_SECONDS = 25 * 60
+# Short durations so mode switching is easy to test.
+WORK_SECONDS = 80
+BREAK_SECONDS = 20
 BG_COLOR = "#F3FFF8"
 CARD_COLOR = "#FFFFFF"
 TIMER_COLOR = "#FF6F61"
@@ -18,8 +19,16 @@ class PomodoroApp:
         self.root.geometry("420x280")
         self.root.configure(bg=BG_COLOR)
 
-        # remaining_seconds stores how much time is left in the session.
-        self.remaining_seconds = TOTAL_SECONDS
+        # mode tracks the high-level app state.
+        # Allowed values: "idle", "work", "break", "paused"
+        self.mode = "idle"
+
+        # paused_mode remembers which mode was active before pausing.
+        # This lets Start resume the correct mode.
+        self.paused_mode = None
+
+        # remaining_seconds stores how much time is left in the current mode.
+        self.remaining_seconds = WORK_SECONDS
 
         # timer_job stores the scheduled `after` callback id.
         # It is None when no countdown callback is currently scheduled.
@@ -113,51 +122,86 @@ class PomodoroApp:
         # Refresh the label text using the latest remaining_seconds value.
         self.time_label.config(text=self.format_time(self.remaining_seconds))
 
-    def set_status(self, status_text):
-        # Keep status updates in one place for clarity.
+    def set_status(self):
+        # Keep status text and color updates in one place for clarity.
+        status_texts = {
+            "idle": "Idle",
+            "work": "Working",
+            "break": "Break",
+            "paused": "Paused",
+        }
         status_colors = {
-            "Idle": STATUS_IDLE_COLOR,
-            "Running": STATUS_RUNNING_COLOR,
-            "Paused": STATUS_PAUSED_COLOR,
+            "idle": STATUS_IDLE_COLOR,
+            "work": STATUS_RUNNING_COLOR,
+            "break": STATUS_RUNNING_COLOR,
+            "paused": STATUS_PAUSED_COLOR,
         }
         self.status_label.config(
-            text=f"Status: {status_text}",
-            fg=status_colors.get(status_text, STATUS_IDLE_COLOR)
+            text=f"Status: {status_texts.get(self.mode, 'Idle')}",
+            fg=status_colors.get(self.mode, STATUS_IDLE_COLOR)
         )
 
     def start_timer(self):
-        # Prevent parallel timers by starting only when no callback is scheduled.
-        if self.timer_job is None and self.remaining_seconds > 0:
-            self.set_status("Running")
+        # Start has two behaviors:
+        # 1) idle -> begin work mode
+        # 2) paused -> resume whichever mode was paused
+        if self.timer_job is not None:
+            return
+
+        if self.mode == "idle":
+            self.mode = "work"
+            self.remaining_seconds = WORK_SECONDS
+        elif self.mode == "paused" and self.paused_mode in ("work", "break"):
+            self.mode = self.paused_mode
+
+        if self.mode in ("work", "break") and self.remaining_seconds > 0:
+            self.set_status()
             self.countdown()
 
     def pause_timer(self):
-        # Pause by cancelling the next scheduled callback.
-        if self.timer_job is not None:
+        # Pause works during both work and break countdowns.
+        if self.timer_job is not None and self.mode in ("work", "break"):
             self.root.after_cancel(self.timer_job)
             self.timer_job = None
-            self.set_status("Paused")
+            self.paused_mode = self.mode
+            self.mode = "paused"
+            self.set_status()
 
     def reset_timer(self):
-        # Reset should also stop a running timer before restoring initial time.
+        # Reset should stop any running timer and return to idle.
         if self.timer_job is not None:
             self.root.after_cancel(self.timer_job)
             self.timer_job = None
 
-        self.remaining_seconds = TOTAL_SECONDS
+        self.mode = "idle"
+        self.paused_mode = None
+        self.remaining_seconds = WORK_SECONDS
         self.update_display()
-        self.set_status("Idle")
+        self.set_status()
 
     def countdown(self):
-        # Keep the existing countdown flow: decrement, update display, schedule next tick.
+        # Countdown behavior depends on the active mode.
         if self.remaining_seconds > 0:
             self.remaining_seconds -= 1
             self.update_display()
             self.timer_job = self.root.after(1000, self.countdown)
         else:
-            # Reaching 00:00 ends the timer loop.
+            # Reaching 00:00 changes mode:
+            # work -> break (auto-start break)
+            # break -> idle (stop)
             self.timer_job = None
-            self.set_status("Idle")
+            if self.mode == "work":
+                self.mode = "break"
+                self.remaining_seconds = BREAK_SECONDS
+                self.set_status()
+                self.update_display()
+                self.countdown()
+            elif self.mode == "break":
+                self.mode = "idle"
+                self.paused_mode = None
+                self.remaining_seconds = WORK_SECONDS
+                self.update_display()
+                self.set_status()
 
 
 if __name__ == "__main__":
