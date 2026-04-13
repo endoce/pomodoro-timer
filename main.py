@@ -1,4 +1,6 @@
 import tkinter as tk
+import json
+from pathlib import Path
 
 # Short durations so mode switching is easy to test.
 WORK_SECONDS = 30
@@ -9,6 +11,7 @@ TIMER_COLOR = "#FF6F61"
 STATUS_IDLE_COLOR = "#5C6F7B"
 STATUS_RUNNING_COLOR = "#2E9E5B"
 STATUS_PAUSED_COLOR = "#F39C3D"
+STATS_FILE = Path("stats.json")
 
 
 class PomodoroApp:
@@ -40,6 +43,7 @@ class PomodoroApp:
         # focus_seconds tracks total completed work time in seconds.
         self.completed_sessions = 0
         self.focus_seconds = 0
+        self.load_stats()
 
         # Main card keeps content grouped and centered with clean spacing.
         self.main_frame = tk.Frame(root, bg=CARD_COLOR, padx=24, pady=24)
@@ -70,7 +74,7 @@ class PomodoroApp:
         # Stats label shows completed work sessions and total focus time.
         self.stats_label = tk.Label(
             self.main_frame,
-            text="Completed: 0 | Focus: 0s",
+            text=f"Completed: {self.completed_sessions} | Focus: {self.focus_seconds}s",
             font=("Arial", 11, "bold"),
             fg=STATUS_IDLE_COLOR,
             bg="#EAF4FF",
@@ -147,6 +151,35 @@ class PomodoroApp:
             text=f"Completed: {self.completed_sessions} | Focus: {self.focus_seconds}s"
         )
 
+    def load_stats(self):
+        # Try reading stats from stats.json.
+        # If anything goes wrong, keep safe zero defaults.
+        if not STATS_FILE.exists():
+            return
+
+        try:
+            with STATS_FILE.open("r", encoding="utf-8") as file:
+                stats_data = json.load(file)
+
+            self.completed_sessions = int(stats_data.get("completed_sessions", 0))
+            self.focus_seconds = int(stats_data.get("focus_seconds", 0))
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            self.completed_sessions = 0
+            self.focus_seconds = 0
+
+    def save_stats(self):
+        # Save current stats to stats.json.
+        # Ignore file errors so the timer never crashes.
+        stats_data = {
+            "completed_sessions": self.completed_sessions,
+            "focus_seconds": self.focus_seconds,
+        }
+        try:
+            with STATS_FILE.open("w", encoding="utf-8") as file:
+                json.dump(stats_data, file)
+        except OSError:
+            pass
+
     def set_status(self):
         # Keep status text and color updates in one place for clarity.
         status_texts = {
@@ -219,6 +252,7 @@ class PomodoroApp:
                 # Count only completed work sessions.
                 self.completed_sessions += 1
                 self.focus_seconds += WORK_SECONDS
+                self.save_stats()
                 self.update_stats_display()
 
                 self.mode = "break"
