@@ -173,6 +173,22 @@ class PomodoroApp:
         )
         self.reset_button.grid(row=0, column=2, padx=4)
 
+        # Keep Clear Stats on its own row to avoid crowding the main controls.
+        self.clear_stats_button = tk.Button(
+            self.main_frame,
+            text="Clear Stats",
+            width=12,
+            bg="#7CC8F8",
+            fg="white",
+            activebackground="#6EBDEB",
+            activeforeground="white",
+            font=("Arial", 10, "bold"),
+            relief="raised",
+            bd=2,
+            command=self.clear_stats
+        )
+        self.clear_stats_button.pack(pady=(12, 0))
+
     def format_time(self, seconds):
         # Convert total seconds into MM:SS format.
         minutes = seconds // 60
@@ -274,6 +290,24 @@ class PomodoroApp:
         self.remaining_seconds = self.work_seconds
         self.update_display()
         self.set_status()
+
+    def clear_stats(self):
+        # Ask for confirmation so stats are not cleared by mistake.
+        should_clear = messagebox.askyesno(
+            "Clear Statistics",
+            "Are you sure you want to clear completed sessions and focus time?"
+        )
+
+        # If the user cancels, keep everything exactly as it is.
+        if not should_clear:
+            return
+
+        # Clear only statistics values.
+        # Timer mode and remaining time are intentionally untouched.
+        self.completed_sessions = 0
+        self.focus_seconds = 0
+        self.update_stats_display()
+        self.save_stats()
 
     def countdown(self):
         # Countdown behavior depends on the active mode.
