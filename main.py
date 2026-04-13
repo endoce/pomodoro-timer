@@ -15,7 +15,7 @@ class PomodoroApp:
         # Keep a reference to the main Tkinter window.
         self.root = root
         self.root.title("Pomodoro Timer")
-        self.root.geometry("380x280")
+        self.root.geometry("420x280")
         self.root.configure(bg=BG_COLOR)
 
         # remaining_seconds stores how much time is left in the session.
@@ -59,7 +59,7 @@ class PomodoroApp:
         self.start_button = tk.Button(
             self.button_frame,
             text="Start",
-            width=11,
+            width=10,
             bg="#4CAF6D",
             fg="white",
             activebackground="#43A861",
@@ -69,13 +69,13 @@ class PomodoroApp:
             bd=2,
             command=self.start_timer
         )
-        self.start_button.grid(row=0, column=0, padx=6)
+        self.start_button.grid(row=0, column=0, padx=4)
 
         # Pause stops the scheduled countdown callback with after_cancel.
         self.pause_button = tk.Button(
             self.button_frame,
             text="Pause",
-            width=11,
+            width=10,
             bg="#F4A340",
             fg="white",
             activebackground="#E39230",
@@ -85,13 +85,13 @@ class PomodoroApp:
             bd=2,
             command=self.pause_timer
         )
-        self.pause_button.grid(row=0, column=1, padx=6)
+        self.pause_button.grid(row=0, column=1, padx=4)
 
         # Reset stops any running timer and restores 25:00.
         self.reset_button = tk.Button(
             self.button_frame,
             text="Reset",
-            width=11,
+            width=10,
             bg="#7CC8F8",
             fg="white",
             activebackground="#6EBDEB",
@@ -101,7 +101,7 @@ class PomodoroApp:
             bd=2,
             command=self.reset_timer
         )
-        self.reset_button.grid(row=0, column=2, padx=6)
+        self.reset_button.grid(row=0, column=2, padx=4)
 
     def format_time(self, seconds):
         # Convert total seconds into MM:SS format.
