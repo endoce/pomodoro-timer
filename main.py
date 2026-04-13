@@ -1,8 +1,8 @@
 import tkinter as tk
 
 # Short durations so mode switching is easy to test.
-WORK_SECONDS = 80
-BREAK_SECONDS = 20
+WORK_SECONDS = 30
+BREAK_SECONDS = 10
 BG_COLOR = "#F3FFF8"
 CARD_COLOR = "#FFFFFF"
 TIMER_COLOR = "#FF6F61"
@@ -34,6 +34,12 @@ class PomodoroApp:
         # It is None when no countdown callback is currently scheduled.
         self.timer_job = None
 
+        # Basic in-memory statistics.
+        # completed_sessions counts finished work sessions.
+        # focus_seconds tracks total completed work time in seconds.
+        self.completed_sessions = 0
+        self.focus_seconds = 0
+
         # Main card keeps content grouped and centered with clean spacing.
         self.main_frame = tk.Frame(root, bg=CARD_COLOR, padx=24, pady=24)
         self.main_frame.pack(padx=16, pady=16, fill="both", expand=True)
@@ -59,6 +65,18 @@ class PomodoroApp:
             pady=6
         )
         self.status_label.pack(pady=(0, 16))
+
+        # Stats label shows completed work sessions and total focus time.
+        self.stats_label = tk.Label(
+            self.main_frame,
+            text="Completed: 0 | Focus: 0s",
+            font=("Arial", 11, "bold"),
+            fg=STATUS_IDLE_COLOR,
+            bg="#EAF4FF",
+            padx=14,
+            pady=4
+        )
+        self.stats_label.pack(pady=(0, 16))
 
         # Use one frame so the three control buttons stay on one row.
         self.button_frame = tk.Frame(self.main_frame, bg=CARD_COLOR)
@@ -121,6 +139,12 @@ class PomodoroApp:
     def update_display(self):
         # Refresh the label text using the latest remaining_seconds value.
         self.time_label.config(text=self.format_time(self.remaining_seconds))
+
+    def update_stats_display(self):
+        # Keep stats text updates in one place.
+        self.stats_label.config(
+            text=f"Completed: {self.completed_sessions} | Focus: {self.focus_seconds}s"
+        )
 
     def set_status(self):
         # Keep status text and color updates in one place for clarity.
@@ -191,6 +215,11 @@ class PomodoroApp:
             # break -> idle (stop)
             self.timer_job = None
             if self.mode == "work":
+                # Count only completed work sessions.
+                self.completed_sessions += 1
+                self.focus_seconds += WORK_SECONDS
+                self.update_stats_display()
+
                 self.mode = "break"
                 self.remaining_seconds = BREAK_SECONDS
                 self.set_status()
