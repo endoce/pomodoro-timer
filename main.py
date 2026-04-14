@@ -113,7 +113,7 @@ class PomodoroApp:
         self.long_break_every = self.config_data["long_break_every"]
         self.root.title(self.window_title)
         # Increased height so all labels and control buttons are visible at startup.
-        self.root.geometry("420x390")
+        self.root.geometry("420x430")
         self.root.configure(bg=BG_COLOR)
         # Use one close handler for the window X button.
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -278,6 +278,22 @@ class PomodoroApp:
         )
         self.skip_button.grid(row=0, column=1, padx=4)
 
+        # Settings gets its own row so controls stay readable in the default window.
+        self.settings_button = tk.Button(
+            self.main_frame,
+            text="Settings",
+            width=12,
+            bg="#7CC8F8",
+            fg="white",
+            activebackground="#6EBDEB",
+            activeforeground="white",
+            font=("Arial", 10, "bold"),
+            relief="raised",
+            bd=2,
+            command=self.open_settings_dialog
+        )
+        self.settings_button.pack(pady=(8, 0))
+
     def format_time(self, seconds):
         # Convert total seconds into MM:SS format.
         minutes = seconds // 60
@@ -333,6 +349,139 @@ class PomodoroApp:
                 json.dump(stats_data, file)
         except OSError:
             pass
+
+    def save_config(self):
+        # Save current configuration to config.json.
+        # Keep this in one helper so future config saves are easy to reuse.
+        config_data = {
+            "window_title": self.window_title,
+            "work_seconds": self.work_seconds,
+            "break_seconds": self.break_seconds,
+            "auto_start_break": self.auto_start_break,
+            "auto_start_work": self.auto_start_work,
+            "long_break_seconds": self.long_break_seconds,
+            "long_break_every": self.long_break_every,
+        }
+        with CONFIG_FILE.open("w", encoding="utf-8") as file:
+            json.dump(config_data, file, indent=2)
+
+    def open_settings_dialog(self):
+        # Build a simple top-level window for editing timer settings.
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Settings")
+        dialog.configure(bg=CARD_COLOR)
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Keep all field variables together so Save can validate and read them.
+        numeric_fields = {}
+        bool_fields = {}
+
+        # Helper to render one numeric entry row.
+        def add_numeric_row(row_index, label_text, key_name, current_value):
+            tk.Label(
+                dialog,
+                text=label_text,
+                font=("Arial", 10),
+                bg=CARD_COLOR
+            ).grid(row=row_index, column=0, sticky="w", padx=12, pady=6)
+            entry_var = tk.StringVar(value=str(current_value))
+            tk.Entry(dialog, textvariable=entry_var, width=18).grid(
+                row=row_index, column=1, sticky="ew", padx=12, pady=6
+            )
+            numeric_fields[key_name] = entry_var
+
+        # Helper to render one boolean checkbox row.
+        def add_bool_row(row_index, label_text, key_name, current_value):
+            bool_var = tk.BooleanVar(value=current_value)
+            tk.Checkbutton(
+                dialog,
+                text=label_text,
+                variable=bool_var,
+                bg=CARD_COLOR,
+                activebackground=CARD_COLOR
+            ).grid(row=row_index, column=0, columnspan=2, sticky="w", padx=12, pady=6)
+            bool_fields[key_name] = bool_var
+
+        add_numeric_row(0, "Work seconds", "work_seconds", self.work_seconds)
+        add_numeric_row(1, "Break seconds", "break_seconds", self.break_seconds)
+        add_numeric_row(2, "Long break seconds", "long_break_seconds", self.long_break_seconds)
+        add_numeric_row(3, "Long break every", "long_break_every", self.long_break_every)
+        add_bool_row(4, "Auto-start break", "auto_start_break", self.auto_start_break)
+        add_bool_row(5, "Auto-start work", "auto_start_work", self.auto_start_work)
+
+        def save_settings():
+            # Validate numeric values as positive integers before saving.
+            parsed_values = {}
+            for key_name, entry_var in numeric_fields.items():
+                raw_value = entry_var.get().strip()
+                try:
+                    parsed_value = int(raw_value)
+                except ValueError:
+                    messagebox.showerror(
+                        "Invalid Settings",
+                        f"{key_name} must be a positive integer."
+                    )
+                    return
+
+                if parsed_value <= 0:
+                    messagebox.showerror(
+                        "Invalid Settings",
+                        f"{key_name} must be a positive integer."
+                    )
+                    return
+                parsed_values[key_name] = parsed_value
+
+            # Apply validated values to in-memory config.
+            self.work_seconds = parsed_values["work_seconds"]
+            self.break_seconds = parsed_values["break_seconds"]
+            self.long_break_seconds = parsed_values["long_break_seconds"]
+            self.long_break_every = parsed_values["long_break_every"]
+            self.auto_start_break = bool_fields["auto_start_break"].get()
+            self.auto_start_work = bool_fields["auto_start_work"].get()
+
+            # Keep shared config_data in sync with the latest values.
+            self.config_data["work_seconds"] = self.work_seconds
+            self.config_data["break_seconds"] = self.break_seconds
+            self.config_data["long_break_seconds"] = self.long_break_seconds
+            self.config_data["long_break_every"] = self.long_break_every
+            self.config_data["auto_start_break"] = self.auto_start_break
+            self.config_data["auto_start_work"] = self.auto_start_work
+
+            # Save config to disk; keep dialog open if writing fails.
+            try:
+                self.save_config()
+            except OSError:
+                messagebox.showerror(
+                    "Save Failed",
+                    "Could not write config.json. Please try again."
+                )
+                return
+
+            # Refresh idle display to the new work duration only when idle.
+            if self.mode == "idle":
+                self.remaining_seconds = self.work_seconds
+                self.update_display()
+
+            # Cycle text depends on long_break_every, so refresh it after save.
+            self.update_cycle_display()
+            dialog.destroy()
+
+        save_button = tk.Button(
+            dialog,
+            text="Save",
+            width=12,
+            bg="#4CAF6D",
+            fg="white",
+            activebackground="#43A861",
+            activeforeground="white",
+            font=("Arial", 10, "bold"),
+            relief="raised",
+            bd=2,
+            command=save_settings
+        )
+        save_button.grid(row=6, column=0, columnspan=2, pady=(8, 12))
 
     def set_status(self):
         # Keep status text and color updates in one place for clarity.
