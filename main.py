@@ -3,12 +3,28 @@ from tkinter import messagebox
 import json
 from pathlib import Path
 
-BG_COLOR = "#F3FFF8"
-CARD_COLOR = "#FFFFFF"
-TIMER_COLOR = "#FF6F61"
-STATUS_IDLE_COLOR = "#5C6F7B"
-STATUS_RUNNING_COLOR = "#2E9E5B"
-STATUS_PAUSED_COLOR = "#F39C3D"
+# Fresh Mint theme palette.
+BG_COLOR = "#F4FFF7"
+CARD_COLOR = "#F8F8F8"
+INFO_CARD_COLOR = "#EAF7F0"
+PRIMARY_TEXT_COLOR = "#3D4C4A"
+SECONDARY_TEXT_COLOR = "#6B7C78"
+TIMER_COLOR = "#FF6B6B"
+STATUS_IDLE_COLOR = "#7F8C8D"
+STATUS_WORK_COLOR = "#2ECC71"
+STATUS_BREAK_COLOR = "#3498DB"
+STATUS_LONG_BREAK_COLOR = "#5DADE2"
+STATUS_PAUSED_COLOR = "#F39C12"
+ACCENT_BORDER_COLOR = "#2F3E3B"
+
+# Button colors from the same palette for consistent visuals.
+BUTTON_TEXT_COLOR = "white"
+START_BUTTON_COLOR = "#27AE60"
+PAUSE_BUTTON_COLOR = "#F39C12"
+RESET_BUTTON_COLOR = "#5DADE2"
+SKIP_BUTTON_COLOR = "#E67E22"
+CLEAR_STATS_BUTTON_COLOR = "#85C1E9"
+SETTINGS_BUTTON_COLOR = "#AAB7B8"
 STATS_FILE = Path("stats.json")
 CONFIG_FILE = Path("config.json")
 DEFAULT_CONFIG = {
@@ -160,9 +176,13 @@ class PomodoroApp:
             text="Status: Idle",
             font=("Arial", 13, "bold"),
             fg=STATUS_IDLE_COLOR,
-            bg="#EAF4FF",
+            bg=INFO_CARD_COLOR,
             padx=14,
-            pady=6
+            pady=6,
+            bd=1,
+            relief="solid",
+            highlightthickness=1,
+            highlightbackground=ACCENT_BORDER_COLOR
         )
         self.status_label.pack(pady=(0, 12))
 
@@ -171,10 +191,14 @@ class PomodoroApp:
             self.main_frame,
             text=f"Completed: {self.completed_sessions} | Focus: {self.focus_seconds}s",
             font=("Arial", 11, "bold"),
-            fg=STATUS_IDLE_COLOR,
-            bg="#EAF4FF",
+            fg=SECONDARY_TEXT_COLOR,
+            bg=INFO_CARD_COLOR,
             padx=14,
-            pady=4
+            pady=4,
+            bd=1,
+            relief="solid",
+            highlightthickness=1,
+            highlightbackground=ACCENT_BORDER_COLOR
         )
         self.stats_label.pack(pady=(0, 8))
 
@@ -183,10 +207,14 @@ class PomodoroApp:
             self.main_frame,
             text="",
             font=("Arial", 11, "bold"),
-            fg=STATUS_IDLE_COLOR,
-            bg="#EAF4FF",
+            fg=SECONDARY_TEXT_COLOR,
+            bg=INFO_CARD_COLOR,
             padx=14,
-            pady=4
+            pady=4,
+            bd=1,
+            relief="solid",
+            highlightthickness=1,
+            highlightbackground=ACCENT_BORDER_COLOR
         )
         self.cycle_label.pack(pady=(0, 12))
         self.update_cycle_display()
@@ -200,10 +228,10 @@ class PomodoroApp:
             self.button_frame,
             text="Start",
             width=10,
-            bg="#4CAF6D",
-            fg="white",
-            activebackground="#43A861",
-            activeforeground="white",
+            bg=START_BUTTON_COLOR,
+            fg=BUTTON_TEXT_COLOR,
+            activebackground=START_BUTTON_COLOR,
+            activeforeground=BUTTON_TEXT_COLOR,
             font=("Arial", 11, "bold"),
             relief="raised",
             bd=2,
@@ -216,10 +244,10 @@ class PomodoroApp:
             self.button_frame,
             text="Pause",
             width=10,
-            bg="#F4A340",
-            fg="white",
-            activebackground="#E39230",
-            activeforeground="white",
+            bg=PAUSE_BUTTON_COLOR,
+            fg=BUTTON_TEXT_COLOR,
+            activebackground=PAUSE_BUTTON_COLOR,
+            activeforeground=BUTTON_TEXT_COLOR,
             font=("Arial", 11, "bold"),
             relief="raised",
             bd=2,
@@ -232,10 +260,10 @@ class PomodoroApp:
             self.button_frame,
             text="Reset",
             width=10,
-            bg="#7CC8F8",
-            fg="white",
-            activebackground="#6EBDEB",
-            activeforeground="white",
+            bg=RESET_BUTTON_COLOR,
+            fg=BUTTON_TEXT_COLOR,
+            activebackground=RESET_BUTTON_COLOR,
+            activeforeground=BUTTON_TEXT_COLOR,
             font=("Arial", 11, "bold"),
             relief="raised",
             bd=2,
@@ -251,10 +279,10 @@ class PomodoroApp:
             self.utility_button_frame,
             text="Clear Stats",
             width=12,
-            bg="#7CC8F8",
-            fg="white",
-            activebackground="#6EBDEB",
-            activeforeground="white",
+            bg=CLEAR_STATS_BUTTON_COLOR,
+            fg=BUTTON_TEXT_COLOR,
+            activebackground=CLEAR_STATS_BUTTON_COLOR,
+            activeforeground=BUTTON_TEXT_COLOR,
             font=("Arial", 10, "bold"),
             relief="raised",
             bd=2,
@@ -267,10 +295,10 @@ class PomodoroApp:
             self.utility_button_frame,
             text="Skip",
             width=12,
-            bg="#F4A340",
-            fg="white",
-            activebackground="#E39230",
-            activeforeground="white",
+            bg=SKIP_BUTTON_COLOR,
+            fg=BUTTON_TEXT_COLOR,
+            activebackground=SKIP_BUTTON_COLOR,
+            activeforeground=BUTTON_TEXT_COLOR,
             font=("Arial", 10, "bold"),
             relief="raised",
             bd=2,
@@ -283,10 +311,10 @@ class PomodoroApp:
             self.main_frame,
             text="Settings",
             width=12,
-            bg="#7CC8F8",
-            fg="white",
-            activebackground="#6EBDEB",
-            activeforeground="white",
+            bg=SETTINGS_BUTTON_COLOR,
+            fg=BUTTON_TEXT_COLOR,
+            activebackground=SETTINGS_BUTTON_COLOR,
+            activeforeground=BUTTON_TEXT_COLOR,
             font=("Arial", 10, "bold"),
             relief="raised",
             bd=2,
@@ -384,6 +412,7 @@ class PomodoroApp:
                 dialog,
                 text=label_text,
                 font=("Arial", 10),
+                fg=PRIMARY_TEXT_COLOR,
                 bg=CARD_COLOR
             ).grid(row=row_index, column=0, sticky="w", padx=12, pady=6)
             entry_var = tk.StringVar(value=str(current_value))
@@ -399,6 +428,7 @@ class PomodoroApp:
                 dialog,
                 text=label_text,
                 variable=bool_var,
+                fg=PRIMARY_TEXT_COLOR,
                 bg=CARD_COLOR,
                 activebackground=CARD_COLOR
             ).grid(row=row_index, column=0, columnspan=2, sticky="w", padx=12, pady=6)
@@ -472,10 +502,10 @@ class PomodoroApp:
             dialog,
             text="Save",
             width=12,
-            bg="#4CAF6D",
-            fg="white",
-            activebackground="#43A861",
-            activeforeground="white",
+            bg=START_BUTTON_COLOR,
+            fg=BUTTON_TEXT_COLOR,
+            activebackground=START_BUTTON_COLOR,
+            activeforeground=BUTTON_TEXT_COLOR,
             font=("Arial", 10, "bold"),
             relief="raised",
             bd=2,
@@ -494,9 +524,9 @@ class PomodoroApp:
         }
         status_colors = {
             "idle": STATUS_IDLE_COLOR,
-            "work": STATUS_RUNNING_COLOR,
-            "break": STATUS_RUNNING_COLOR,
-            "long_break": STATUS_RUNNING_COLOR,
+            "work": STATUS_WORK_COLOR,
+            "break": STATUS_BREAK_COLOR,
+            "long_break": STATUS_LONG_BREAK_COLOR,
             "paused": STATUS_PAUSED_COLOR,
         }
         self.status_label.config(
