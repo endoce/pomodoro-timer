@@ -115,6 +115,8 @@ class PomodoroApp:
         # Increased height so all labels and control buttons are visible at startup.
         self.root.geometry("420x390")
         self.root.configure(bg=BG_COLOR)
+        # Use one close handler for the window X button.
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # mode tracks the high-level app state.
         # Allowed values: "idle", "work", "break", "long_break", "paused"
@@ -441,6 +443,34 @@ class PomodoroApp:
             self.set_status()
             self.update_display()
             self.countdown()
+
+    def on_close(self):
+        # Idle can close immediately because no session is in progress.
+        if self.mode == "idle":
+            self.shutdown_app()
+            return
+
+        # Active or paused phases ask for confirmation before closing.
+        # This protects users from accidentally closing mid-session.
+        should_exit = messagebox.askyesno(
+            "Exit Pomodoro Timer",
+            "A timer session is active or paused. Are you sure you want to exit?"
+        )
+        if not should_exit:
+            # Cancel keeps the app running exactly as it is.
+            return
+
+        self.shutdown_app()
+
+    def shutdown_app(self):
+        # Safely stop scheduled callbacks before destroying the window.
+        if self.timer_job is not None:
+            self.root.after_cancel(self.timer_job)
+            self.timer_job = None
+
+        # Save one final copy of statistics before exiting.
+        self.save_stats()
+        self.root.destroy()
 
     def countdown(self):
         # Countdown behavior depends on the active mode.
