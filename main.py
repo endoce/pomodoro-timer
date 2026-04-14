@@ -92,14 +92,6 @@ def load_config():
             loaded_data.get("long_break_every", DEFAULT_CONFIG["long_break_every"]),
             DEFAULT_CONFIG["long_break_every"],
         )
-        config_data["auto_start_break"] = parse_bool(
-            loaded_data.get("auto_start_break", DEFAULT_CONFIG["auto_start_break"]),
-            DEFAULT_CONFIG["auto_start_break"],
-        )
-        config_data["auto_start_work"] = parse_bool(
-            loaded_data.get("auto_start_work", DEFAULT_CONFIG["auto_start_work"]),
-            DEFAULT_CONFIG["auto_start_work"],
-        )
     except (json.JSONDecodeError, OSError, TypeError, ValueError):
         # Invalid or unreadable config should not crash the app.
         return DEFAULT_CONFIG.copy()
@@ -121,7 +113,7 @@ class PomodoroApp:
         self.long_break_every = self.config_data["long_break_every"]
         self.root.title(self.window_title)
         # Increased height so timer, labels, and buttons are visible at startup.
-        self.root.geometry("420x340")
+        self.root.geometry("420x360")
         self.root.configure(bg=BG_COLOR)
 
         # mode tracks the high-level app state.
@@ -182,7 +174,20 @@ class PomodoroApp:
             padx=14,
             pady=4
         )
-        self.stats_label.pack(pady=(0, 16))
+        self.stats_label.pack(pady=(0, 10))
+
+        # Cycle label shows progress toward the next long break.
+        self.cycle_label = tk.Label(
+            self.main_frame,
+            text="",
+            font=("Arial", 11, "bold"),
+            fg=STATUS_IDLE_COLOR,
+            bg="#EAF4FF",
+            padx=14,
+            pady=4
+        )
+        self.cycle_label.pack(pady=(0, 16))
+        self.update_cycle_display()
 
         # Use one frame so the three control buttons stay on one row.
         self.button_frame = tk.Frame(self.main_frame, bg=CARD_COLOR)
@@ -267,6 +272,17 @@ class PomodoroApp:
         self.stats_label.config(
             text=f"Completed: {self.completed_sessions} | Focus: {self.focus_seconds}s"
         )
+
+    def update_cycle_display(self):
+        # Show cycle progress in the format: Cycle: X / N.
+        cycle_total = self.long_break_every
+
+        # X uses completed work sessions and wraps after a long-break trigger.
+        cycle_progress = self.completed_sessions % cycle_total
+        if cycle_progress == 0 and self.completed_sessions > 0:
+            cycle_progress = cycle_total
+
+        self.cycle_label.config(text=f"Cycle: {cycle_progress} / {cycle_total}")
 
     def load_stats(self):
         # Try reading stats from stats.json.
@@ -373,6 +389,7 @@ class PomodoroApp:
         self.completed_sessions = 0
         self.focus_seconds = 0
         self.update_stats_display()
+        self.update_cycle_display()
         self.save_stats()
 
     def countdown(self):
@@ -390,6 +407,7 @@ class PomodoroApp:
                 self.focus_seconds += self.work_seconds
                 self.save_stats()
                 self.update_stats_display()
+                self.update_cycle_display()
 
                 # Every N completed work sessions, use a long break.
                 use_long_break = self.completed_sessions % self.long_break_every == 0
