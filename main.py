@@ -112,9 +112,11 @@ class PomodoroApp:
         self.long_break_seconds = self.config_data["long_break_seconds"]
         self.long_break_every = self.config_data["long_break_every"]
         self.root.title(self.window_title)
-        # Increased height so timer, labels, and buttons are visible at startup.
-        self.root.geometry("420x360")
+        # Increased height so all labels and control buttons are visible at startup.
+        self.root.geometry("420x390")
         self.root.configure(bg=BG_COLOR)
+        # Use one close handler for the window X button.
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # mode tracks the high-level app state.
         # Allowed values: "idle", "work", "break", "long_break", "paused"
@@ -139,7 +141,7 @@ class PomodoroApp:
         self.load_stats()
 
         # Main card keeps content grouped and centered with clean spacing.
-        self.main_frame = tk.Frame(root, bg=CARD_COLOR, padx=24, pady=24)
+        self.main_frame = tk.Frame(root, bg=CARD_COLOR, padx=24, pady=20)
         self.main_frame.pack(padx=16, pady=16, fill="both", expand=True)
 
         # Large playful timer text in a warm accent color.
@@ -150,7 +152,7 @@ class PomodoroApp:
             fg=TIMER_COLOR,
             bg=CARD_COLOR
         )
-        self.time_label.pack(pady=(0, 14))
+        self.time_label.pack(pady=(0, 12))
 
         # Status label is styled to stand out clearly under the timer.
         self.status_label = tk.Label(
@@ -162,7 +164,7 @@ class PomodoroApp:
             padx=14,
             pady=6
         )
-        self.status_label.pack(pady=(0, 16))
+        self.status_label.pack(pady=(0, 12))
 
         # Stats label shows completed work sessions and total focus time.
         self.stats_label = tk.Label(
@@ -174,7 +176,7 @@ class PomodoroApp:
             padx=14,
             pady=4
         )
-        self.stats_label.pack(pady=(0, 10))
+        self.stats_label.pack(pady=(0, 8))
 
         # Cycle label shows progress toward the next long break.
         self.cycle_label = tk.Label(
@@ -186,12 +188,12 @@ class PomodoroApp:
             padx=14,
             pady=4
         )
-        self.cycle_label.pack(pady=(0, 16))
+        self.cycle_label.pack(pady=(0, 12))
         self.update_cycle_display()
 
         # Use one frame so the three control buttons stay on one row.
         self.button_frame = tk.Frame(self.main_frame, bg=CARD_COLOR)
-        self.button_frame.pack()
+        self.button_frame.pack(pady=(0, 8))
 
         # Start begins or resumes the countdown.
         self.start_button = tk.Button(
@@ -241,9 +243,12 @@ class PomodoroApp:
         )
         self.reset_button.grid(row=0, column=2, padx=4)
 
-        # Keep Clear Stats on its own row to avoid crowding the main controls.
+        # Keep utility buttons on their own row to avoid crowding primary controls.
+        self.utility_button_frame = tk.Frame(self.main_frame, bg=CARD_COLOR)
+        self.utility_button_frame.pack(pady=(8, 0))
+
         self.clear_stats_button = tk.Button(
-            self.main_frame,
+            self.utility_button_frame,
             text="Clear Stats",
             width=12,
             bg="#7CC8F8",
@@ -255,7 +260,23 @@ class PomodoroApp:
             bd=2,
             command=self.clear_stats
         )
-        self.clear_stats_button.pack(pady=(12, 0))
+        self.clear_stats_button.grid(row=0, column=0, padx=4)
+
+        # Skip lets users move forward without counting a normal completion.
+        self.skip_button = tk.Button(
+            self.utility_button_frame,
+            text="Skip",
+            width=12,
+            bg="#F4A340",
+            fg="white",
+            activebackground="#E39230",
+            activeforeground="white",
+            font=("Arial", 10, "bold"),
+            relief="raised",
+            bd=2,
+            command=self.skip_phase
+        )
+        self.skip_button.grid(row=0, column=1, padx=4)
 
     def format_time(self, seconds):
         # Convert total seconds into MM:SS format.
@@ -391,6 +412,65 @@ class PomodoroApp:
         self.update_stats_display()
         self.update_cycle_display()
         self.save_stats()
+
+    def skip_phase(self):
+        # Skip does nothing when already idle.
+        if self.mode == "idle":
+            return
+
+        # If paused, use the remembered phase to decide skip behavior.
+        phase_to_skip = self.paused_mode if self.mode == "paused" else self.mode
+        if phase_to_skip not in ("work", "break", "long_break"):
+            return
+
+        # Stop any active countdown callback before switching phases.
+        if self.timer_job is not None:
+            self.root.after_cancel(self.timer_job)
+            self.timer_job = None
+
+        if phase_to_skip == "work":
+            # Skipping work cancels the session with no stat or cycle changes.
+            self.mode = "idle"
+            self.paused_mode = None
+            self.remaining_seconds = self.work_seconds
+            self.update_display()
+            self.set_status()
+        else:
+            # Skipping break/long break starts the next work session immediately.
+            self.mode = "work"
+            self.paused_mode = None
+            self.remaining_seconds = self.work_seconds
+            self.set_status()
+            self.update_display()
+            self.countdown()
+
+    def on_close(self):
+        # Idle can close immediately because no session is in progress.
+        if self.mode == "idle":
+            self.shutdown_app()
+            return
+
+        # Active or paused phases ask for confirmation before closing.
+        # This protects users from accidentally closing mid-session.
+        should_exit = messagebox.askyesno(
+            "Exit Pomodoro Timer",
+            "A timer session is active or paused. Are you sure you want to exit?"
+        )
+        if not should_exit:
+            # Cancel keeps the app running exactly as it is.
+            return
+
+        self.shutdown_app()
+
+    def shutdown_app(self):
+        # Safely stop scheduled callbacks before destroying the window.
+        if self.timer_job is not None:
+            self.root.after_cancel(self.timer_job)
+            self.timer_job = None
+
+        # Save one final copy of statistics before exiting.
+        self.save_stats()
+        self.root.destroy()
 
     def countdown(self):
         # Countdown behavior depends on the active mode.
