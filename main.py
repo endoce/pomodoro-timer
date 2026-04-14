@@ -15,7 +15,40 @@ DEFAULT_CONFIG = {
     "window_title": "Pomodoro Timer",
     "work_seconds": 30,
     "break_seconds": 10,
+    "auto_start_break": True,
+    "auto_start_work": False,
+    "long_break_seconds": 20,
+    "long_break_every": 3,
 }
+
+
+def parse_bool(value, default):
+    # Accept true/false values safely from config.json.
+    if isinstance(value, bool):
+        return value
+
+    # Also accept common text values so config edits are beginner-friendly.
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("true", "1", "yes", "on"):
+            return True
+        if normalized in ("false", "0", "no", "off"):
+            return False
+
+    # Any unexpected value falls back to the provided default.
+    return default
+
+
+def parse_positive_int(value, default):
+    # Read numeric config values safely and keep a positive fallback.
+    try:
+        parsed_value = int(value)
+        if parsed_value > 0:
+            return parsed_value
+    except (TypeError, ValueError):
+        pass
+
+    return default
 
 
 def load_config():
@@ -35,11 +68,29 @@ def load_config():
         config_data["window_title"] = str(
             loaded_data.get("window_title", DEFAULT_CONFIG["window_title"])
         )
-        config_data["work_seconds"] = int(
-            loaded_data.get("work_seconds", DEFAULT_CONFIG["work_seconds"])
+        config_data["work_seconds"] = parse_positive_int(
+            loaded_data.get("work_seconds", DEFAULT_CONFIG["work_seconds"]),
+            DEFAULT_CONFIG["work_seconds"],
         )
-        config_data["break_seconds"] = int(
-            loaded_data.get("break_seconds", DEFAULT_CONFIG["break_seconds"])
+        config_data["break_seconds"] = parse_positive_int(
+            loaded_data.get("break_seconds", DEFAULT_CONFIG["break_seconds"]),
+            DEFAULT_CONFIG["break_seconds"],
+        )
+        config_data["auto_start_break"] = parse_bool(
+            loaded_data.get("auto_start_break", DEFAULT_CONFIG["auto_start_break"]),
+            DEFAULT_CONFIG["auto_start_break"],
+        )
+        config_data["auto_start_work"] = parse_bool(
+            loaded_data.get("auto_start_work", DEFAULT_CONFIG["auto_start_work"]),
+            DEFAULT_CONFIG["auto_start_work"],
+        )
+        config_data["long_break_seconds"] = parse_positive_int(
+            loaded_data.get("long_break_seconds", DEFAULT_CONFIG["long_break_seconds"]),
+            DEFAULT_CONFIG["long_break_seconds"],
+        )
+        config_data["long_break_every"] = parse_positive_int(
+            loaded_data.get("long_break_every", DEFAULT_CONFIG["long_break_every"]),
+            DEFAULT_CONFIG["long_break_every"],
         )
     except (json.JSONDecodeError, OSError, TypeError, ValueError):
         # Invalid or unreadable config should not crash the app.
@@ -56,13 +107,17 @@ class PomodoroApp:
         self.window_title = self.config_data["window_title"]
         self.work_seconds = self.config_data["work_seconds"]
         self.break_seconds = self.config_data["break_seconds"]
+        self.auto_start_break = self.config_data["auto_start_break"]
+        self.auto_start_work = self.config_data["auto_start_work"]
+        self.long_break_seconds = self.config_data["long_break_seconds"]
+        self.long_break_every = self.config_data["long_break_every"]
         self.root.title(self.window_title)
         # Increased height so timer, labels, and buttons are visible at startup.
-        self.root.geometry("420x340")
+        self.root.geometry("420x360")
         self.root.configure(bg=BG_COLOR)
 
         # mode tracks the high-level app state.
-        # Allowed values: "idle", "work", "break", "paused"
+        # Allowed values: "idle", "work", "break", "long_break", "paused"
         self.mode = "idle"
 
         # paused_mode remembers which mode was active before pausing.
@@ -119,7 +174,20 @@ class PomodoroApp:
             padx=14,
             pady=4
         )
-        self.stats_label.pack(pady=(0, 16))
+        self.stats_label.pack(pady=(0, 10))
+
+        # Cycle label shows progress toward the next long break.
+        self.cycle_label = tk.Label(
+            self.main_frame,
+            text="",
+            font=("Arial", 11, "bold"),
+            fg=STATUS_IDLE_COLOR,
+            bg="#EAF4FF",
+            padx=14,
+            pady=4
+        )
+        self.cycle_label.pack(pady=(0, 16))
+        self.update_cycle_display()
 
         # Use one frame so the three control buttons stay on one row.
         self.button_frame = tk.Frame(self.main_frame, bg=CARD_COLOR)
@@ -205,6 +273,17 @@ class PomodoroApp:
             text=f"Completed: {self.completed_sessions} | Focus: {self.focus_seconds}s"
         )
 
+    def update_cycle_display(self):
+        # Show cycle progress in the format: Cycle: X / N.
+        cycle_total = self.long_break_every
+
+        # X uses completed work sessions and wraps after a long-break trigger.
+        cycle_progress = self.completed_sessions % cycle_total
+        if cycle_progress == 0 and self.completed_sessions > 0:
+            cycle_progress = cycle_total
+
+        self.cycle_label.config(text=f"Cycle: {cycle_progress} / {cycle_total}")
+
     def load_stats(self):
         # Try reading stats from stats.json.
         # If anything goes wrong, keep safe zero defaults.
@@ -240,12 +319,14 @@ class PomodoroApp:
             "idle": "Idle",
             "work": "Working",
             "break": "Break",
+            "long_break": "Long Break",
             "paused": "Paused",
         }
         status_colors = {
             "idle": STATUS_IDLE_COLOR,
             "work": STATUS_RUNNING_COLOR,
             "break": STATUS_RUNNING_COLOR,
+            "long_break": STATUS_RUNNING_COLOR,
             "paused": STATUS_PAUSED_COLOR,
         }
         self.status_label.config(
@@ -254,25 +335,26 @@ class PomodoroApp:
         )
 
     def start_timer(self):
-        # Start has two behaviors:
+        # Start supports these flows:
         # 1) idle -> begin work mode
         # 2) paused -> resume whichever mode was paused
+        # 3) waiting work/break/long break phase -> begin that phase
         if self.timer_job is not None:
             return
 
         if self.mode == "idle":
             self.mode = "work"
             self.remaining_seconds = self.work_seconds
-        elif self.mode == "paused" and self.paused_mode in ("work", "break"):
+        elif self.mode == "paused" and self.paused_mode in ("work", "break", "long_break"):
             self.mode = self.paused_mode
 
-        if self.mode in ("work", "break") and self.remaining_seconds > 0:
+        if self.mode in ("work", "break", "long_break") and self.remaining_seconds > 0:
             self.set_status()
             self.countdown()
 
     def pause_timer(self):
         # Pause works during both work and break countdowns.
-        if self.timer_job is not None and self.mode in ("work", "break"):
+        if self.timer_job is not None and self.mode in ("work", "break", "long_break"):
             self.root.after_cancel(self.timer_job)
             self.timer_job = None
             self.paused_mode = self.mode
@@ -307,6 +389,7 @@ class PomodoroApp:
         self.completed_sessions = 0
         self.focus_seconds = 0
         self.update_stats_display()
+        self.update_cycle_display()
         self.save_stats()
 
     def countdown(self):
@@ -316,9 +399,7 @@ class PomodoroApp:
             self.update_display()
             self.timer_job = self.root.after(1000, self.countdown)
         else:
-            # Reaching 00:00 changes mode:
-            # work -> break (auto-start break)
-            # break -> idle (stop)
+            # Reaching 00:00 changes mode based on current phase and config.
             self.timer_job = None
             if self.mode == "work":
                 # Count only completed work sessions.
@@ -326,35 +407,71 @@ class PomodoroApp:
                 self.focus_seconds += self.work_seconds
                 self.save_stats()
                 self.update_stats_display()
+                self.update_cycle_display()
 
-                # Move into break mode and start break countdown immediately.
-                self.mode = "break"
-                self.remaining_seconds = self.break_seconds
-                self.set_status()
-                self.update_display()
+                # Every N completed work sessions, use a long break.
+                use_long_break = self.completed_sessions % self.long_break_every == 0
+                next_mode = "long_break" if use_long_break else "break"
+                next_seconds = self.long_break_seconds if use_long_break else self.break_seconds
 
-                # Show one reminder right when work finishes.
-                # This branch runs only once per completed work session.
-                messagebox.showinfo(
-                    "Work Session Complete",
-                    "Great job! Your work session is complete. Break time has started."
-                )
-
-                self.countdown()
-            elif self.mode == "break":
-                # Break is done, so return to idle with a full work timer ready.
-                self.mode = "idle"
+                # Move into the chosen break mode and prepare full duration.
+                self.mode = next_mode
                 self.paused_mode = None
-                self.remaining_seconds = self.work_seconds
-                self.update_display()
+                self.remaining_seconds = next_seconds
                 self.set_status()
+                self.update_display()
 
-                # Show one reminder right when the break finishes.
-                # Pause and Reset do not call this branch, so they never show reminders.
-                messagebox.showinfo(
-                    "Break Complete",
-                    "Your break is complete. You are ready to start the next work session."
-                )
+                # Reminder text matches break type and auto-start behavior.
+                if use_long_break:
+                    waiting_text = "Great job! Your work session is complete. Press Start when you are ready for your long break."
+                    started_text = "Great job! Your work session is complete. Long break time has started."
+                else:
+                    waiting_text = "Great job! Your work session is complete. Press Start when you are ready for your break."
+                    started_text = "Great job! Your work session is complete. Break time has started."
+
+                if self.auto_start_break:
+                    messagebox.showinfo("Work Session Complete", started_text)
+                    self.countdown()
+                else:
+                    messagebox.showinfo("Work Session Complete", waiting_text)
+            elif self.mode in ("break", "long_break"):
+                # Break and long break completion never change statistics.
+                was_long_break = self.mode == "long_break"
+
+                if self.auto_start_work:
+                    self.mode = "work"
+                    self.paused_mode = None
+                    self.remaining_seconds = self.work_seconds
+                    self.set_status()
+                    self.update_display()
+                    if was_long_break:
+                        messagebox.showinfo(
+                            "Long Break Complete",
+                            "Your long break is complete. The next work session has started."
+                        )
+                    else:
+                        messagebox.showinfo(
+                            "Break Complete",
+                            "Your break is complete. The next work session has started."
+                        )
+                    self.countdown()
+                else:
+                    # Return to idle with a fresh work timer waiting for Start.
+                    self.mode = "idle"
+                    self.paused_mode = None
+                    self.remaining_seconds = self.work_seconds
+                    self.update_display()
+                    self.set_status()
+                    if was_long_break:
+                        messagebox.showinfo(
+                            "Long Break Complete",
+                            "Your long break is complete. Press Start when you are ready for the next work session."
+                        )
+                    else:
+                        messagebox.showinfo(
+                            "Break Complete",
+                            "Your break is complete. Press Start when you are ready for the next work session."
+                        )
 
 
 if __name__ == "__main__":

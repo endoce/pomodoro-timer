@@ -1,5 +1,9 @@
 {
   "window_title": "Pomodoro Timer",
   "work_seconds": 30,
-  "break_seconds": 10
+  "break_seconds": 10,
+  "long_break_seconds": 20,
+  "long_break_every": 3,
+  "auto_start_break": true,
+  "auto_start_work": false
 }
