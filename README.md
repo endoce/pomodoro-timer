@@ -42,3 +42,4 @@ Not included in this step:
 ```bash
 python main.py
 ```
+OpenCode development smoke test.
