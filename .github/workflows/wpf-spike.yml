@@ -1,0 +1,147 @@
+name: WPF risk validation
+
+on:
+  push:
+    branches: [spike/wpf-risk-validation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wpf-spike-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-x64:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: spikes/wpf-risk-validation
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      CONFIGURATION: Release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install pinned .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: spikes/wpf-risk-validation/global.json
+      - name: Validate SDK and prepare fixed Windows tools
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((dotnet --version) -ne '10.0.403') { throw 'SDK does not match global.json.' }
+          ./scripts/prepare-tools.ps1
+      - name: Restore locked dependencies
+        run: |
+          dotnet restore Tests/PomodoroTimer.Spike.Tests.csproj --locked-mode
+          if ($LASTEXITCODE) { throw 'Core/test locked restore failed.' }
+          dotnet restore App/PomodoroTimer.Spike.csproj --locked-mode
+          if ($LASTEXITCODE) { throw 'App locked restore failed.' }
+      - name: Run deterministic logic tests
+        run: |
+          New-Item artifacts -ItemType Directory -Force | Out-Null
+          dotnet run --project Tests/PomodoroTimer.Spike.Tests.csproj -c Release --no-restore 2>&1 | Tee-Object artifacts/LOGIC-TESTS.txt
+          if ($LASTEXITCODE) { throw 'Logic tests failed.' }
+      - name: Verify evaluated deployment properties
+        run: |
+          $p = dotnet msbuild App/PomodoroTimer.Spike.csproj -getProperty:TargetFramework,RuntimeIdentifier,SelfContained,WindowsAppSDKSelfContained,WindowsPackageType | ConvertFrom-Json
+          if ($LASTEXITCODE) { throw 'Project property evaluation failed.' }
+          $expected = @{TargetFramework='net10.0-windows10.0.26100.0';RuntimeIdentifier='win-x64';SelfContained='true';WindowsAppSDKSelfContained='true';WindowsPackageType='None'}
+          foreach ($key in $expected.Keys) {
+            if ($p.Properties.$key -ne $expected[$key]) { throw "Deployment property mismatch: $key" }
+          }
+      - name: Build and publish Release x64
+        run: |
+          dotnet build App/PomodoroTimer.Spike.csproj -c Release --no-restore
+          if ($LASTEXITCODE) { throw 'WPF build failed.' }
+          # RID and both self-contained modes are fixed in the app project;
+          # do not propagate CLI RID overrides to the platform-neutral Core library.
+          dotnet publish App/PomodoroTimer.Spike.csproj -c Release --no-restore -o artifacts/publish
+          if ($LASTEXITCODE) { throw 'Publish failed.' }
+      - name: Add signed app-local VC runtime and audit dependencies
+        run: |
+          Copy-Item README.md, docs/DESKTOP-ACCEPTANCE.md, docs/VC-RUNTIME.md artifacts/publish
+          ./scripts/add-vc-runtime.ps1 -PublishDirectory "$PWD/artifacts/publish" -ReportDirectory "$PWD/artifacts"
+          ./scripts/verify-publish.ps1 -PublishDirectory "$PWD/artifacts/publish" -ReportDirectory "$PWD/artifacts" |
+            Tee-Object artifacts/PUBLISH-TESTS.txt
+      - name: Published application initialization (not desktop acceptance)
+        run: |
+          $process = Start-Process "$PWD/artifacts/publish/PomodoroTimerSpike.exe" -ArgumentList @('--self-test','--output',"`"$PWD/artifacts/INITIALIZATION-TEST.txt`"") -PassThru
+          if (!$process.WaitForExit(60000)) { $process.Kill(); throw 'Published initialization timed out.' }
+          if ($process.ExitCode -ne 0) { throw "Published initialization failed: $($process.ExitCode)" }
+          Get-Content artifacts/INITIALIZATION-TEST.txt
+      - name: Summarize completed tests before artifact validation
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @('LOGIC-TESTS.txt','PUBLISH-TESTS.txt','INITIALIZATION-TEST.txt') | ForEach-Object {
+            Get-Content "artifacts/$_"
+          } | Set-Content artifacts/TEST-SUMMARY.txt
+          'NOT TESTED: Windows 11 25H2 window/tray/notification display/click activation/normal-user install/uninstall/sleep.' | Add-Content artifacts/TEST-SUMMARY.txt
+      - name: Build portable ZIP and user-level installer
+        run: |
+          # Use a stable folder name inside ZIP, not the internal publish folder name.
+          $stage = "$PWD/artifacts/stage/PomodoroTimerSpike"
+          New-Item $stage -ItemType Directory -Force | Out-Null
+          Copy-Item artifacts/publish/* $stage -Recurse -Force
+          Compress-Archive -Path $stage -DestinationPath artifacts/PomodoroTimer-WPF-Spike-Windows-x64.zip -Force
+          & ./tools/inno/ISCC.exe "/DPublishDirectory=$PWD/artifacts/publish" "/DArtifactDirectory=$PWD/artifacts" installer/spike.iss
+          if ($LASTEXITCODE) { throw 'Setup.exe generation failed.' }
+      - name: Build info, checksums and artifact tests
+        run: |
+          @"
+          Commit SHA: ${{ github.sha }}
+          .NET SDK: $(dotnet --version)
+          .NET runtime: 10.0.14 (see published runtimeconfig and manifest)
+          Windows SDK servicing baseline: 10.0.26100.9457
+          Windows Target Platform Version: 10.0.26100.0
+          Windows managed reference package: 10.0.26100.57
+          Windows App SDK: Microsoft.WindowsAppSDK 2.6.5 Stable
+          TFM: net10.0-windows10.0.26100.0
+          RID: win-x64
+          Configuration: Release
+          .NET SelfContained: true
+          WindowsAppSDKSelfContained: true
+          WindowsPackageType: None
+          Runner: windows-2025-vs2026 (Windows Server 2025; not Windows 11 desktop)
+          Runner image: $env:ImageVersion
+          Actual build OS: $([Environment]::OSVersion.Version)
+          Installer compiler: Inno Setup 6.7.4
+          Target desktop: Windows 11 25H2 x64 26200.x, NOT TESTED
+          Built UTC: $([DateTimeOffset]::UtcNow.ToString('O'))
+          "@ | Set-Content artifacts/BUILD-INFO.txt
+          Get-Content tools/WINDOWS-SDK-INFO.txt | Add-Content artifacts/BUILD-INFO.txt
+          Get-Content artifacts/VC-RUNTIME.csv | Add-Content artifacts/BUILD-INFO.txt
+          @('PomodoroTimer-WPF-Spike-Windows-x64.zip','PomodoroTimer-WPF-Spike-Setup.exe') | ForEach-Object {
+            "$((Get-FileHash "artifacts/$_" -Algorithm SHA256).Hash.ToLowerInvariant())  $_"
+          } | Set-Content artifacts/SHA256SUMS.txt
+          ./scripts/verify-artifacts.ps1 -ArtifactDirectory "$PWD/artifacts" | Tee-Object artifacts/ARTIFACT-TESTS.txt
+          Get-Content artifacts/ARTIFACT-TESTS.txt | Add-Content artifacts/TEST-SUMMARY.txt
+      - name: Upload validation artifact (30 days)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: PomodoroTimer-WPF-Spike-Windows-x64
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            spikes/wpf-risk-validation/artifacts/*.zip
+            spikes/wpf-risk-validation/artifacts/*.exe
+            spikes/wpf-risk-validation/artifacts/*.txt
+            spikes/wpf-risk-validation/artifacts/*.csv
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: WPF-Spike-Failure-Diagnostics
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            spikes/wpf-risk-validation/artifacts/*.txt
+            spikes/wpf-risk-validation/tools/WINDOWS-SDK-INFO.txt
+            C:/Users/runneradmin/AppData/Local/PomodoroTimerSpike/logs/*.log

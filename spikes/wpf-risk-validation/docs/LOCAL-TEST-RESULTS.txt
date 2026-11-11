@@ -1,0 +1,38 @@
+Local validation evidence — 2026-11-10
+Host: Linux, not a Windows 11 25H2 desktop
+.NET SDK: 10.0.403 (verified official archive)
+
+Command (from spikes/wpf-risk-validation):
+dotnet run --project Tests/PomodoroTimer.Spike.Tests.csproj -c Release --no-restore
+
+PASS Start does not subtract a second
+PASS Duplicate Start does not restart
+PASS Delayed ticks do not accumulate drift
+PASS Pause excludes elapsed pause time
+PASS Resume does not subtract a second
+PASS Repeated pause resume retains subsecond time
+PASS Completion happens once even after repeated ticks
+PASS Completed timer can restart
+PASS Pause at deadline finalizes instead of creating paused zero
+PASS Tray actions share timer and window operations
+PASS Notification event attached before Register; cleanup once
+PASS Notification registration failure is reported and contained
+PASS Notification send failure cannot stop timer completion
+PASS Notification unregister failure is contained
+TOTAL 14; PASSED 14; FAILED 0
+
+Locked restore: Core/Tests passed; App passed with EnableWindowsTargeting=true.
+Project evaluation: net10.0-windows10.0.26100.0, win-x64,
+SelfContained=true, WindowsAppSDKSelfContained=true, WindowsPackageType=None.
+Source XML/JSON/YAML checks passed; fixed Action SHAs and no prerelease lock dependencies.
+
+Windows build/publish: NOT PASSED on Linux. Native mt.exe/MakePRI.exe cannot run.
+C#/XAML diagnostic compilation reached assembly generation with 0 compiler warnings,
+but its command still failed at MakePRI. Diagnostic output is not a deliverable.
+
+GitHub push/Actions/artifacts: BLOCKED, no authenticated write identity (HTTP 401).
+User selected local commit only until authorization is configured.
+
+NOT TESTED: WPF window, real NotifyIcon menu/resources, notification display,
+real SDK registration/click activation/cold start, clean-machine VC loader behavior,
+ordinary-user installation/uninstallation, DPI, multi-monitor, themes, sleep/resume.
