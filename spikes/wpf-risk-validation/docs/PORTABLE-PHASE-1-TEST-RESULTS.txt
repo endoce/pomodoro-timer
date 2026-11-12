@@ -1,0 +1,269 @@
+Portable phase 1 — local validation evidence — 2026-11-11
+Host: Linux x64 (Ubuntu 26.04), uid=992(opencode), not root
+SDK: 10.0.403; Runtime: 10.0.14
+Baseline: spike/wpf-risk-validation / 3588efa7118f1d667e47053e08a04e627e0f82dc
+
+Commands from spikes/wpf-risk-validation, in order:
+TMPDIR=/tmp/opencode DOTNET_ROOT=/tmp/opencode/dotnet-10.0.403 /tmp/opencode/dotnet-10.0.403/dotnet restore Tests/PomodoroTimer.Spike.Tests.csproj --locked-mode
+TMPDIR=/tmp/opencode DOTNET_ROOT=/tmp/opencode/dotnet-10.0.403 /tmp/opencode/dotnet-10.0.403/dotnet build Tests/PomodoroTimer.Spike.Tests.csproj -c Release --no-restore -warnaserror
+TMPDIR=/tmp/opencode DOTNET_ROOT=/tmp/opencode/dotnet-10.0.403 /tmp/opencode/dotnet-10.0.403/dotnet run --project Tests/PomodoroTimer.Spike.Tests.csproj -c Release --no-build --no-restore
+
+Restore: passed (Core/Tests), no dependency or lockfile changes.
+Release build: Core/Tests passed, 0 warnings / 0 errors.
+Final test output (stdout/stderr combined; warnings are intentional fault-injection evidence):
+
+PASS Start does not subtract a second
+PASS Duplicate Start does not restart
+PASS Delayed ticks do not accumulate drift
+PASS Pause excludes elapsed pause time
+PASS Resume does not subtract a second
+PASS Repeated pause resume retains subsecond time
+PASS Completion happens once even after repeated ticks
+PASS Completed timer can restart
+PASS Pause at deadline finalizes instead of creating paused zero
+PASS Tray actions share timer and window operations
+PASS Notification event attached before Register; cleanup once
+PASS Notification registration failure is reported and contained
+PASS Notification send failure cannot stop timer completion
+PASS Notification unregister failure is contained
+PASS Portable production root is AppContext.BaseDirectory
+PASS Portable Chinese and space paths perform real settings I/O
+PASS CurrentDirectory changes neither existing nor default paths
+PASS Data and Logs are created with no remaining write probes
+PASS Log paths are culture independent
+PASS Missing settings return validated defaults without writing
+PASS Settings roundtrip only persists the existing schema field
+PASS Invalid settings input cannot overwrite a valid file
+PASS Corrupt settings remain untouched and saving is refused
+PASS Malformed schema and unknown or duplicate fields are diagnosed
+PASS Future settings schema never loads backup or downgrades
+PASS Future or invalid backup is preserved on save
+PASS Corrupt primary uses backup read-only; explicit restore preserves bytes
+PASS Missing primary with backup requires explicit recovery
+PASS Invalid backup is not adopted or overwritten during recovery
+PASS Atomic interruption before commit keeps primary and last valid backup
+PASS Abrupt process exit leaves flushed orphan ignored by next startup
+PASS Failure reported after commit still leaves a consistent primary and backup
+PASS Interrupted first save does not create a primary or adopt an orphan
+PASS Data path blocked by file fails clearly with no fallback or overwrite
+PASS Actual read-only Data directory rejects saves without changing data
+2026-11-11T06:53:49.2321546+00:00 Warning logs.write.failed: IOException; diagnostic sink unavailable.
+2026-11-11T06:53:49.2331430+00:00 Warning logs.write.failed: Exception; diagnostic sink unavailable.
+PASS Logs path blocked by file warns but timer still completes
+2026-11-11T06:53:49.2414585+00:00 Warning logs.write.failed: UnauthorizedAccessException; diagnostic sink unavailable.
+PASS Actual read-only Logs directory warns without blocking initialization
+2026-11-11T06:53:49.2420006+00:00 Warning storage.read.failed: Exception; diagnostic sink unavailable.
+2026-11-11T06:53:49.2423063+00:00 Warning storage.read.failed: Exception; diagnostic sink unavailable.
+PASS Broken storage diagnostic callback cannot break recovery or timer
+PASS Running timer restarts paused with exact fractional remaining and no downtime
+PASS Ordinary 250ms ticks never commit; transitions completion and exit do
+PASS Ready paused completed and expired snapshots restore without completion replay
+PASS Invalid timer parameters and incomplete state JSON cannot be adopted
+PASS Corrupt state uses valid backup paused without modifying corrupt primary
+PASS Future state remains untouched while timer operates in memory
+PASS State save failure does not abort completion or notification callback
+PASS Log entries contain UTC level event exception and redact named credentials
+PASS Logs rotate on UTC day and retain only the last 14 days
+PASS Logs rotate under the byte cap and enforce total capacity
+PASS Oversized log entries stay valid JSON within the file cap
+2026-11-11T06:53:49.2799829+00:00 Warning logs.cleanup.failed: IOException; diagnostic sink unavailable.
+2026-11-11T06:53:49.2800784+00:00 Warning logs.cleanup.failed: IOException; diagnostic sink unavailable.
+PASS Cleanup preserves in-use logs and unrelated files with a warning
+PASS Default log limits are 5 MiB 50 MiB and 14 days
+TOTAL 51; PASSED 51; FAILED 0; SKIPPED 0
+NOT TESTED: real WPF window, system tray, notification display/activation, installation, Windows 11 25H2 desktop.
+
+Supplementary managed C# diagnostic (NOT a full WPF/App build):
+Temporary project: /tmp/opencode/portable-phase1-managed-diagnostics/ManagedDiagnostics.csproj
+Compiles actual MainViewModel, Diagnostics, Infrastructure and portable services against
+Microsoft.WindowsDesktop.App.Ref 10.0.14 WPF reference assemblies, plus the real Core project.
+Initial build restored this temporary project's references; final verification command:
+TMPDIR=/tmp/opencode DOTNET_ROOT=/tmp/opencode/dotnet-10.0.403 /tmp/opencode/dotnet-10.0.403/dotnet build /tmp/opencode/portable-phase1-managed-diagnostics/ManagedDiagnostics.csproj -c Release --no-restore -warnaserror
+Result: 0 warnings / 0 errors. No XAML generation, notification SDK build, native execution,
+self-contained publish, product artifact or Windows desktop validation is implied.
+
+Static checks:
+- XML parsed: 7 source project/props/XAML/manifest files; JSON parsed: 4 source/lock files.
+- Explicit Compile/ProjectReference targets exist: 10.
+- Changed/new UTF-8 text: final newline, no trailing whitespace, no NUL or new BOM.
+- No real credential signatures found; redaction tests use synthetic placeholder strings.
+- No App code references AppData, CurrentDirectory, Program Files or GetFolderPath for storage.
+- Protected entry/notification/session/tray/installer/workflow/release-script files:
+  11 checked byte-identical to baseline via git object hashes.
+- Branch/HEAD unchanged; no staged changes; no new packages/lockfile edits.
+
+Limitations:
+- Notification/tray tests in the original 14 use fake backends/actions, not Windows UI.
+- Unix permissions are real non-root filesystem tests, not Windows ACL/UAC tests.
+- Abrupt child Environment.Exit occurs after temporary-file Flush(true) but before Commit;
+  it proves interruption handling, not hardware power-loss durability.
+- Logs capacity/rotation tests use small injected limits on the real LogService;
+  production 5 MiB / 50 MiB / 14-day defaults are separately asserted.
+- WPF/App/XAML build, Windows 11 25H2 desktop, normal application Exit checkpoint ordering,
+  NTFS/Windows sharing, actual ZIP launch/move and notification/tray/single-instance regressions
+  remain NOT TESTED this round.
+- No commit, push, PR, merge, workflow trigger or remote mutation performed.
+
+Portable Phase 1 review repairs — 2026-11-11 (append; the 51-test evidence above is historical)
+P1-01 exit checkpoint order; P2-01 normalized-path transaction; P2-02 escaped credential redaction.
+Same Linux x64 / non-root / SDK 10.0.403 / Runtime 10.0.14 / baseline and branch.
+Commands from repository root, all with TMPDIR=/tmp/opencode and DOTNET_ROOT=/tmp/opencode/dotnet-10.0.403:
+/tmp/opencode/dotnet-10.0.403/dotnet restore spikes/wpf-risk-validation/Core/PomodoroTimer.Spike.Core.csproj --locked-mode
+/tmp/opencode/dotnet-10.0.403/dotnet restore spikes/wpf-risk-validation/Tests/PomodoroTimer.Spike.Tests.csproj --locked-mode
+/tmp/opencode/dotnet-10.0.403/dotnet build spikes/wpf-risk-validation/Core/PomodoroTimer.Spike.Core.csproj -c Release --no-restore -warnaserror
+/tmp/opencode/dotnet-10.0.403/dotnet build spikes/wpf-risk-validation/Tests/PomodoroTimer.Spike.Tests.csproj -c Release --no-restore -warnaserror
+/tmp/opencode/dotnet-10.0.403/dotnet build /tmp/opencode/portable-phase1-managed-diagnostics/ManagedDiagnostics.csproj -c Release --no-restore -warnaserror
+/tmp/opencode/dotnet-10.0.403/dotnet run --project spikes/wpf-risk-validation/Tests/PomodoroTimer.Spike.Tests.csproj -c Release --no-build --no-restore
+
+Core locked restore: exit code 0; all projects up-to-date.
+Tests locked restore: exit code 0; all projects up-to-date.
+Core Release: exit code 0; 0 Warning(s), 0 Error(s).
+Tests Release: exit code 0; 0 Warning(s), 0 Error(s).
+Actual ViewModel managed-reference diagnostic Release: exit code 0; 0 Warning(s), 0 Error(s).
+Temporary diagnostic project now also links actual ExitCoordinator.cs; no product App/XAML build implied.
+Three consecutive complete runs: each TOTAL 84; PASSED 84; FAILED 0; SKIPPED 0; exit code 0.
+Counts: original 14 + original Portable 37 + repair 33 = 84 distinct tests, not 252 tests.
+Final repeated-run stdout/stderr (warnings deliberately exercise fault handling):
+
+PASS Start does not subtract a second
+PASS Duplicate Start does not restart
+PASS Delayed ticks do not accumulate drift
+PASS Pause excludes elapsed pause time
+PASS Resume does not subtract a second
+PASS Repeated pause resume retains subsecond time
+PASS Completion happens once even after repeated ticks
+PASS Completed timer can restart
+PASS Pause at deadline finalizes instead of creating paused zero
+PASS Tray actions share timer and window operations
+PASS Notification event attached before Register; cleanup once
+PASS Notification registration failure is reported and contained
+PASS Notification send failure cannot stop timer completion
+PASS Notification unregister failure is contained
+PASS Portable production root is AppContext.BaseDirectory
+PASS Portable Chinese and space paths perform real settings I/O
+PASS CurrentDirectory changes neither existing nor default paths
+PASS Data and Logs are created with no remaining write probes
+PASS Log paths are culture independent
+PASS Missing settings return validated defaults without writing
+PASS Settings roundtrip only persists the existing schema field
+PASS Invalid settings input cannot overwrite a valid file
+PASS Corrupt settings remain untouched and saving is refused
+PASS Malformed schema and unknown or duplicate fields are diagnosed
+PASS Future settings schema never loads backup or downgrades
+PASS Future or invalid backup is preserved on save
+PASS Corrupt primary uses backup read-only; explicit restore preserves bytes
+PASS Missing primary with backup requires explicit recovery
+PASS Invalid backup is not adopted or overwritten during recovery
+PASS Atomic interruption before commit keeps primary and last valid backup
+PASS Abrupt process exit leaves flushed orphan ignored by next startup
+PASS Failure reported after commit still leaves a consistent primary and backup
+PASS Interrupted first save does not create a primary or adopt an orphan
+PASS Data path blocked by file fails clearly with no fallback or overwrite
+PASS Actual read-only Data directory rejects saves without changing data
+2026-11-11T07:30:18.5427401+00:00 Warning logs.write.failed: IOException; diagnostic sink unavailable.
+2026-11-11T07:30:18.5434632+00:00 Warning logs.write.failed: Exception; diagnostic sink unavailable.
+PASS Logs path blocked by file warns but timer still completes
+2026-11-11T07:30:18.5501361+00:00 Warning logs.write.failed: UnauthorizedAccessException; diagnostic sink unavailable.
+PASS Actual read-only Logs directory warns without blocking initialization
+2026-11-11T07:30:18.5507443+00:00 Warning storage.read.failed: Exception; diagnostic sink unavailable.
+2026-11-11T07:30:18.5511968+00:00 Warning storage.read.failed: Exception; diagnostic sink unavailable.
+PASS Broken storage diagnostic callback cannot break recovery or timer
+PASS Running timer restarts paused with exact fractional remaining and no downtime
+PASS Ordinary 250ms ticks never commit; transitions completion and exit do
+PASS Ready paused completed and expired snapshots restore without completion replay
+PASS Invalid timer parameters and incomplete state JSON cannot be adopted
+PASS Corrupt state uses valid backup paused without modifying corrupt primary
+PASS Future state remains untouched while timer operates in memory
+PASS State save failure does not abort completion or notification callback
+PASS Log entries contain UTC level event exception and redact named credentials
+PASS Logs rotate on UTC day and retain only the last 14 days
+PASS Logs rotate under the byte cap and enforce total capacity
+PASS Oversized log entries stay valid JSON within the file cap
+2026-11-11T07:30:18.6068276+00:00 Warning logs.cleanup.failed: IOException; diagnostic sink unavailable.
+2026-11-11T07:30:18.6069336+00:00 Warning logs.cleanup.failed: IOException; diagnostic sink unavailable.
+PASS Cleanup preserves in-use logs and unrelated files with a warning
+PASS Default log limits are 5 MiB 50 MiB and 14 days
+PASS Exit checkpoint finishes and reports before cleanup ownership and WPF event
+PASS Exit duplicate and reentrant requests save dispose and raise event once
+PASS Exit blocked successful save retains ownership until real commit completes
+PASS Exit blocked failed save retains ownership and still cleans up deterministically
+PASS Exit finalize exception and cleanup failures are isolated and diagnosed
+PASS Exit immediate restart at ownership release reads final fractional snapshot
+PASS Exit disabled persistence is explicit and does not overwrite future state
+PASS Exit InProgress never releases ownership and permits a finished retry
+PASS Session reentrant completion during transition cannot misreport a nested failure
+PASS Thread stores simultaneous Save serialize normalized aliases and preserve valid backup
+PASS Thread Save versus Restore cannot interleave validation and replacement
+PASS Thread Restore versus Save protects damaged primary and last valid backup
+PASS Thread first creation contention cannot race unchecked File.Move
+PASS Thread Load timeout is bounded read-only and disables saving
+PASS Thread independent paths do not share the transaction mutex
+PASS Thread same-path nested transaction is rejected without losing outer ownership
+PASS Storage transaction timeout rejects unlimited or excessive waits
+PASS Commit no-op cannot report Saved and final failure result is cached
+PASS Commit pre-boundary failure releases transaction and preserves exact backup
+PASS Commit post-boundary exception reports Failed despite valid new primary
+PASS Process cooperative Save contention is bounded and retry preserves backup
+PASS Process killed transaction owner leaves no permanent lock and orphan is ignored
+PASS Process first creation contention coordinates with parent Store
+PASS Redaction ordinary password apiKey and Bearer Basic stay supported
+PASS Redaction JSON escaped double quote removes the entire credential suffix
+PASS Redaction odd and even backslash runs preserve quoted value boundaries
+PASS Redaction mixed single double and escaped single quotes
+PASS Redaction multiple fields and credential-like embedded fields cannot leak
+PASS Redaction thrown exception inner message stack and event use the same scanner
+PASS Redaction damaged unterminated dangling and illegal quoted suffix fail closed
+PASS Redaction non-sensitive JSON remains intact
+PASS Redaction long escaped malformed value has bounded work and never leaks suffix
+2026-11-11T07:30:20.2675209+00:00 Warning logs.write.failed: InvalidOperationException; diagnostic sink unavailable.
+PASS Redaction exception serialization failure never writes original raw credentials
+TOTAL 84; PASSED 84; FAILED 0; SKIPPED 0
+NOT TESTED: real WPF window, system tray, notification display/activation, installation, Windows 11 25H2 desktop.
+
+Evidence boundaries:
+- 9 exit/session tests use the real extracted coordinator and persistence service, with a simulated ownership
+  callback; blocked-success/failure tests also use actual flushed temporary files and a real competing Store.
+  The immediate restart is managed state restoration at the ownership-release callback, NOT real AppInstance.
+- 11 thread/storage/commit-boundary tests use real files. Owners stop at a deterministic commit barrier;
+  contenders finish their finite lock timeouts BEFORE release, then explicitly retry and validate backup.
+  These prove actual overlapping operations, not randomly delayed tasks or two simultaneous successful commits.
+- 3 new child-process tests use real OS processes, named Mutexes, ready/release file barriers and real IO.
+  Parent Save/Restore/Load time out while child owns transaction; release or Kill makes later saves possible.
+  Existing Environment.Exit(73) test separately verifies bypassed finally and ignored flushed orphan.
+- 10 redaction tests call actual LogService and parse actual JSON Lines; only synthetic invalid credentials.
+  Unclosed/ambiguous quoted fields conservatively omit the rest of the input; no raw fallback file write.
+- Saved requires validated write/Flush(true)/commit/readback, not hardware power-loss durability.
+- Windows CI full WPF/XAML/App build and real Application.Exit were NOT run this round.
+- Windows 11 25H2 26200.x desktop AppInstance ownership handoff, NTFS/ACL/sharing, tray/notification and
+  actual EXE restart/move remain pending. Prior CI history does not validate these repairs.
+
+Repair static/diff checks:
+- 7 source XML files parsed; 4 source/lock JSON files parsed; 12 explicit Compile/ProjectReference targets exist.
+- Changed/new UTF-8 files have final newline, no trailing whitespace/NUL/BOM; git diff --check passed.
+- Credential-signature scan found no private keys, GitHub/OpenAI/Slack token signatures or JWT signatures.
+  Synthetic test values are intentional; this is not proof that arbitrary unmarked secrets can be detected.
+- Original TestTimer method bodies and original 14 test bodies byte-identical to baseline; original 37
+  Portable test bodies untouched. Current first 51 PASS names match the preserved historical output exactly.
+- 10 protected notification/session/tray/installer/workflow/script files byte-identical to baseline.
+  App pre-OnExit code byte-identical after removing the single added coordinator field; startup unchanged.
+- All other tracked files byte-identical to baseline; exact approved 23-file working-tree change set only.
+  Counts including initial Phase 1: 16 new, 6 modified, 1 deleted; no staged files, HEAD/branch unchanged.
+- Full baseline diff plus every untracked file reviewed; copy at /tmp/opencode/portable-phase1-repair-full.diff.
+- Project-mode dotnet format was blocked by sandbox named-pipe SocketException(13), not a source diagnostic.
+  Folder-mode whitespace verification bypassed MSBuild IPC, checked exactly 8 repair-source files and passed:
+  /tmp/opencode/dotnet-10.0.403/dotnet format whitespace spikes/wpf-risk-validation --folder --verify-no-changes --include Tests/PortableRegressionTests.cs App/Infrastructure/StorageTransaction.cs App/Services/ExitCoordinator.cs App/Infrastructure/AtomicJsonStore.cs App/Infrastructure/LogService.cs App/Services/TimerPersistenceSession.cs App/Services/SettingsStore.cs App/Services/TimerStateStore.cs --verbosity diagnostic
+  Final output: Formatted 0 of 8 files; exit code 0. App/ViewModel integration manually checked for existing style.
+- No OpenCode/Azure configuration, forbidden backend, workflow, installer or packaging mutation; no Subagent.
+  No Commit/Push/PR/merge, branch switch, Reset/Clean or Phase 2 work.
+
+Final source-state verification after whitespace-only source fixes — 2026-11-11 07:38 UTC:
+- Re-ran the same six restore/build/run commands listed in the repair section, with the same SDK environment.
+- Core/Tests locked restore: both exit code 0, lockfiles unchanged.
+- Core Release, Tests Release, actual ViewModel managed-reference diagnostic Release: all exit code 0,
+  each 0 Warning(s), 0 Error(s). No product App/XAML compilation or WPF execution implied.
+- Final complete run: TOTAL 84; PASSED 84; FAILED 0; SKIPPED 0; exit code 0.
+  The earlier three repeated runs preceded final whitespace fixes; this run validates final source state.
+- Raw final stdout/stderr: /tmp/opencode/portable-phase1-repair-tests-final.txt.
+  Complete final command/build/test output: /tmp/opencode/portable-phase1-repair-final-validation.txt.
+- Folder-mode whitespace verification repeated against the same eight files: Formatted 0 of 8 files;
+  exit code 0. Only documentation corrections/additions followed this verification.

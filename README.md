@@ -1,5 +1,11 @@
 # Pomodoro Timer
 
+## Pomodoro Timer 2.0 — Portable WPF work in progress
+
+The 2.0 direction is .NET 10 LTS / C# / WPF / Windows App SDK on Windows 11 25H2 x64 (26200.x), with **no installer**. The planned single application download is `PomodoroTimer-Portable-Windows-x64.zip`: extract to a normal-user writable directory, run `PomodoroTimer.exe`, and keep its local `Data/` and `Logs/` when moving the whole folder.
+
+The implementation and Portable-only CI changes are awaiting review; a successful Windows build, real release ZIP and desktop acceptance have **not** been established. See [WPF spike](spikes/wpf-risk-validation/README.md) and [current validation status](spikes/wpf-risk-validation/docs/STATUS.md). The Python/Tkinter description below is the historical implementation, not the 2.0 release.
+
 A simple desktop pomodoro timer built with Python and Tkinter.
 
 ## Project Goal

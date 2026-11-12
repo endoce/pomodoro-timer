@@ -13,7 +13,7 @@
 | OS/进程架构 | x64/x64 |
 | 权限 | 普通用户，未提升 |
 | 应用版本/Commit SHA | 见BUILD-INFO，另记录下载资产 |
-| ZIP/Setup SHA256 | 与SHA256SUMS比较 |
+| Portable ZIP SHA256 | 与外部SHA256SUMS比较，再校验解压后的内部逐文件SHA256 |
 | .NET共享Runtime/开发SDK | 记录是否存在；要求无开发工具测试 |
 | Windows App SDK共享Runtime | 记录是否存在，不能只记录SDK包名 |
 | VC++ Redistributable | 版本、架构或未安装 |
@@ -21,7 +21,7 @@
 | 显示器/缩放 | 型号、100/125/150/200%，是否混合DPI |
 | 主题/高对比度/减少动画 | 填写 |
 | 勿扰/通知设置/节能设置 | 填写 |
-| 日志位置 | %LOCALAPPDATA%\PomodoroTimerSpike\logs |
+| 数据/日志位置 | EXE目录下Data/、Logs/；不回退AppData |
 
 可在PowerShell查询目标OS，不使用已淘汰的WMIC：
 
@@ -29,27 +29,26 @@
 Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' |
   Select-Object DisplayVersion, CurrentBuildNumber, UBR, EditionID
 [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-Get-Process PomodoroTimerSpike -ErrorAction SilentlyContinue |
+Get-Process PomodoroTimer -ErrorAction SilentlyContinue |
   Select-Object Id, Path
 ```
 
 ## 下载与便携版
 
 1. 仓库Actions → WPF risk validation → spike分支对应**成功运行**。
-2. 下载 `PomodoroTimer-WPF-Spike-Windows-x64` Artifact（30天，可能要求GitHub登录）。
-3. 解压Artifact外层ZIP，取得内层应用ZIP、Setup、校验和及构建/测试报告。
+2. 下载 `PomodoroTimer-Portable-Windows-x64` Artifact（30天，可能要求GitHub登录），核对对应 Commit 和 BUILD-INFO。当前待审核源码未提交/推送，旧远程运行不能验证它。
+3. 解压Artifact外层ZIP，取得唯一内层应用ZIP、校验和及构建/测试报告；没有安装程序。
 4. 在该目录执行：
 
 ```powershell
-Get-FileHash .\PomodoroTimer-WPF-Spike-Windows-x64.zip -Algorithm SHA256
-Get-FileHash .\PomodoroTimer-WPF-Spike-Setup.exe -Algorithm SHA256
+Get-FileHash .\PomodoroTimer-Portable-Windows-x64.zip -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 
 逐项比较，不匹配就停止。哈希确认完整性，不独立证明发布者身份。预览包未签名，SmartScreen或企业策略可能阻止；不要关闭安全功能来宣称成功。
 
-5. 将应用ZIP完整解压到普通用户可访问且包含中文/空格的测试路径。
-6. 运行 `PomodoroTimerSpike\PomodoroTimerSpike.exe`，不从压缩包内部运行、不以管理员启动。
+5. 将应用ZIP完整解压到普通用户可写且包含中文/空格的测试路径；按内层 SHA256SUMS 逐项核对文件。不得删减 DLL，不补装共享运行时掩盖打包缺陷。
+6. 运行 `PomodoroTimer\PomodoroTimer.exe`，不从压缩包内部运行、不以管理员启动。
 7. 对照窗口诊断信息确认Build、权限、版本和PID；启动失败记录错误与日志，不补装SDK掩盖缺依赖。
 
 ## 桌面用例
@@ -80,32 +79,33 @@ Get-Content .\SHA256SUMS.txt
 | P02 | Modern Standby/节能（硬件支持时） | 不误报多次完成；如不可验证标未测试 | 未测试 |
 | P03 | 锁屏、系统时间调整 | 单调时钟不随墙钟变化，记录实际行为 | 未测试 |
 
-## 安装与卸载
+## Portable 数据、搬迁与删除（均未测试）
 
-先从托盘退出并清理便携版注册，避免混淆两份可执行文件身份：
+不再提供安装器，历史安装/卸载用例取消，并不表示这些用例曾通过。先从托盘退出，归档数据与日志，并按需清理旧路径的通知注册，避免混淆两份可执行文件身份：
 
 ```powershell
-& '.\PomodoroTimerSpike\PomodoroTimerSpike.exe' --unregister-notifications
-$LASTEXITCODE
+$process = Start-Process '.\PomodoroTimer\PomodoroTimer.exe' -ArgumentList '--unregister-notifications' -Wait -PassThru
+$process.ExitCode
 ```
 
 WPF程序是GUI应用；需要可靠等待退出码时使用 `Start-Process -Wait -PassThru`。
 
 | ID | 步骤 | 预期 | 实际/证据 |
 |---|---|---|---|
-| I01 | 普通用户运行Setup | 不请求管理员，安装到LocalAppData/Programs/PomodoroTimerSpike | 未测试 |
-| I02 | Start菜单启动安装版 | 无开发环境可运行，诊断正确 | 未测试 |
-| I03 | 对安装版重跑N01～N06/R01～R05 | 分别确认显示、激活、单实例、退出 | 未测试 |
-| I04 | 关闭应用后“已安装的应用”卸载 | SDK UnregisterAll成功后删除应用与快捷方式 | 未测试 |
-| I05 | 应用运行时尝试卸载 | 清理拒绝，提示先退出；不能悄悄删除正在运行的程序 | 未测试 |
-| I06 | 检查通知中心/通知设置/激活登记 | 记录是否仍有残留或无法执行的旧通知 | 未测试 |
-| I07 | 检查安装目录、开始菜单、用户日志目录 | 程序/快捷方式清理；诊断日志按设计保留，明确列出 | 未测试 |
-| I08 | 干净25H2 VM未安装共享.NET/SDK/VC时运行 | 同一包成功；记录实际加载App-local DLL路径 | 未测试 |
-| I09 | 安全测试副本缺VC DLL负例 | 记录真实错误；若共享Runtime兜底则负例不成立 | 未测试 |
+| D01 | 普通用户首次启动ZIP | 在EXE目录创建Data/Logs，无AppData回退/提权 | 未测试 |
+| D02 | 保存设置、计时中退出后重启 | 设置保留；恢复为暂停，不后台继续计时 | 未测试 |
+| D03 | 只读目录、拒绝写入ACL | Data明确报错，不能静默写入AppData；记录退出行为 | 未测试 |
+| D04 | 退出并搬迁整个目录（含Data/Logs） | 在新路径保留设置/暂停状态；重跑N01～N06/R01～R05 | 未测试 |
+| D05 | 旧实例退出后立即重新启动/启动第二副本 | AppInstance所有权交接、最终持久化及单实例行为正确 | 未测试 |
+| D06 | 退出后清理注册并归档/删除目录 | SDK清理退出码正确；记录通知中心/设置/激活登记残留 | 未测试 |
+| D07 | 应用运行时请求注册清理 | 明确拒绝，先退出；不手动删COM键制造成功 | 未测试 |
+| D08 | 干净25H2 VM未安装共享.NET/SDK/VC时运行 | 同一ZIP成功；记录实际加载App-local DLL路径 | 未测试 |
+| D09 | 安全测试副本缺VC DLL负例 | 记录真实错误；若共享Runtime兜底则负例不成立 | 未测试 |
+| D10 | 安全环境断电/磁盘满/USB拔出、NTFS实际写入 | 记录文件一致性与错误；不能用Linux锁/模拟磁盘替代 | 未测试 |
 
-正常 `Unregister()`不永久删除COM登记；卸载/删除ZIP使用 `UnregisterAll()`。不能要求普通退出后所有通知登记消失而同时又声称测试了退出后冷启动。
+正常 `Unregister()`不永久删除COM登记；搬迁/删除ZIP前的清理使用既有 `UnregisterAll()`。不能要求普通退出后所有通知登记消失而同时又声称测试了退出后冷启动。上述清理与搬迁行为尚未实测。
 
-卸载默认保留 `%LOCALAPPDATA%\PomodoroTimerSpike\logs` 用于验收诊断。不自动删除可能属于测试者的日志；如要清理，应先归档证据，再仅删除该PoC自己的目录。
+删除整个 Portable 目录会同时删除其中 Data/Logs，应先归档。旧PoC曾写入AppData的历史日志不自动迁移或清理；如要手工清理，先归档证据，仅处理本应用自己的文件。
 
 注册残留检查只读观察SDK产生的登记/通知设置，不手工删除COM键作为验收通过的手段。附截图、日志时间段、PID、退出码与路径证据；若操作失败，该行标失败而非换环境后覆盖结果。
 
@@ -117,6 +117,7 @@ WPF程序是GUI应用；需要可靠等待退出码时使用 `Start-Process -Wai
 | 自动化逻辑测试 | 见LOGIC-TESTS与TEST-SUMMARY |
 | 普通用户本地启动 | 未测试 |
 | 桌面托盘/通知/原实例激活 | 未测试 |
-| 安装卸载/VC干净环境 | 未测试 |
+| Portable数据/搬迁/VC干净环境 | 未测试 |
+| 历史安装/卸载 | 未测试；发布方向取消，不提供安装程序 |
 
 完成后将本表和证据交给评审。此阶段结束后停止，不开发正式产品、不进入第三阶段。

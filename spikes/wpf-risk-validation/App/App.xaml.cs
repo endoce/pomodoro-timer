@@ -29,6 +29,7 @@ public partial class App : Application
     private MainWindow? window;
     private bool exiting;
     private bool pendingActivation;
+    private ExitCoordinator? exitCoordinator;
 
     protected override async void OnStartup(StartupEventArgs args)
     {
@@ -167,17 +168,24 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs args)
     {
         exiting = true;
-        wakeup?.Stop();
-        SystemEvents.PowerModeChanged -= OnPowerChanged;
-        tray?.Dispose();
-        theme?.Dispose();
-        notifications?.Dispose();
-        if (instance?.IsCurrent == true)
-        {
-            instance.Activated -= OnActivated;
-            instance.UnregisterKey();
-        }
-        SpikeLog.Write("Exit: timer stopped, tray disposed, notification session released");
-        base.OnExit(args);
+        exitCoordinator ??= new(ApplicationLog.Write);
+        exitCoordinator.Run(
+            () => model?.CompletePersistence() ?? new(CheckpointStatus.NotRequired),
+            [
+                new("timer.stop", () => wakeup?.Stop()),
+                new("power.unsubscribe", () => SystemEvents.PowerModeChanged -= OnPowerChanged),
+                new("tray.dispose", () => tray?.Dispose()),
+                new("theme.dispose", () => theme?.Dispose()),
+                new("notifications.dispose", () => notifications?.Dispose())
+            ],
+            () =>
+            {
+                if (instance?.IsCurrent == true)
+                {
+                    instance.Activated -= OnActivated;
+                    instance.UnregisterKey();
+                }
+            },
+            () => base.OnExit(args));
     }
 }

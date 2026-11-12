@@ -25,6 +25,37 @@ public sealed class TestTimer(IMonotonicClock clock)
     public TimeSpan Remaining => TimeSpan.FromTicks(Math.Max(0,
         (Duration - elapsed - (State == TimerState.Running ? clock.Now - startedAt : TimeSpan.Zero)).Ticks));
 
+    public TimerSnapshot CaptureSnapshot() => new()
+    {
+        State = State,
+        DurationTicks = Duration.Ticks,
+        RemainingTicks = Remaining.Ticks
+    };
+
+    public static void ValidateSnapshot(TimerSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (snapshot.SchemaVersion != TimerSnapshot.CurrentSchemaVersion ||
+            snapshot.DurationTicks != Duration.Ticks || !Enum.IsDefined(snapshot.State) ||
+            snapshot.RemainingTicks < 0 || snapshot.RemainingTicks > Duration.Ticks ||
+            (snapshot.State == TimerState.Ready && snapshot.RemainingTicks != Duration.Ticks) ||
+            (snapshot.State == TimerState.Completed && snapshot.RemainingTicks != 0) ||
+            (snapshot.State == TimerState.Paused && snapshot.RemainingTicks == 0))
+            throw new ArgumentException("计时快照的版本、状态或时间参数无效。", nameof(snapshot));
+    }
+
+    // Restore is a startup operation. Never replay downtime or fire Completed during recovery.
+    public void Restore(TimerSnapshot snapshot)
+    {
+        ValidateSnapshot(snapshot);
+        elapsed = Duration - TimeSpan.FromTicks(snapshot.RemainingTicks);
+        startedAt = clock.Now;
+        State = snapshot.State is TimerState.Running or TimerState.Paused
+            ? (snapshot.RemainingTicks == 0 ? TimerState.Completed : TimerState.Paused)
+            : snapshot.State;
+        Changed?.Invoke();
+    }
+
     public void Start()
     {
         if (State is TimerState.Running or TimerState.Paused) return;

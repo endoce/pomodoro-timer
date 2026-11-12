@@ -39,7 +39,7 @@ New-Item -ItemType Directory -Force $ReportDirectory | Out-Null
 $rows | Export-Csv (Join-Path $ReportDirectory 'VC-RUNTIME.csv') -NoTypeInformation -Encoding utf8
 @'
 VC++ v14 runtime: app-local deployment from signed Visual Studio Redist/MSVC/x64/Microsoft.VC*.CRT.
-No global vc_redist installation, no elevation requested by this application's Setup.
+No global vc_redist installation or application installer; unzip and run as a normal user.
 Windows Universal CRT is an OS component, not copied from System32.
 This does NOT prove a clean Windows 11 25H2 desktop has been tested.
 Missing DLL/symbol behavior and clean-machine operation require desktop acceptance.

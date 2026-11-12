@@ -1,6 +1,18 @@
 using PomodoroTimer.Spike.Core.Models;
 using PomodoroTimer.Spike.Core.Services;
 
+if (args.Length == 2 && args[0] == "--hold-state-save")
+{
+    PortableRegressionTests.HoldStateSave(args[1]);
+    return 0;
+}
+
+if (args.Length == 2 && args[0] == "--interrupt-state-save")
+{
+    PortableTests.InterruptStateSave(args[1]);
+    return 74; // The commit boundary terminates the child first; this is never a passing test run.
+}
+
 var tests = new List<(string Name, Action Run)>();
 void Test(string name, Action run) => tests.Add((name, run));
 void Equal<T>(T expected, T actual)
@@ -83,13 +95,18 @@ Test("Notification unregister failure is contained", () =>
     var session=new NotificationSession(backend,()=>{},reports.Add); session.Initialize(); session.Dispose(); Equal(2,reports.Count);
 });
 
+PortableTests.Register(Test);
+PortableRegressionTests.Register(Test);
+
 var failed=0;
+var skipped=0;
 foreach (var (name,run) in tests)
 {
     try { run(); Console.WriteLine($"PASS {name}"); }
+    catch (TestSkipped error) { skipped++; Console.WriteLine($"SKIP {name}: {error.Message}"); }
     catch (Exception error) { failed++; Console.WriteLine($"FAIL {name}: {error.Message}"); }
 }
-Console.WriteLine($"TOTAL {tests.Count}; PASSED {tests.Count-failed}; FAILED {failed}");
+Console.WriteLine($"TOTAL {tests.Count}; PASSED {tests.Count-failed-skipped}; FAILED {failed}; SKIPPED {skipped}");
 Console.WriteLine("NOT TESTED: real WPF window, system tray, notification display/activation, installation, Windows 11 25H2 desktop.");
 return failed == 0 ? 0 : 1;
 

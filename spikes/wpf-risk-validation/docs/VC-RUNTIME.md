@@ -18,7 +18,7 @@ CI从已安装的微软Visual Studio **Redist/MSVC/x64/Microsoft.VC*.CRT**目录
 
 发布审计要求存在 `msvcp140.dll`、`vcruntime140.dll`、`vcruntime140_1.dll`，再扫描实际PE导入检查其他VC DLL依赖。这是文件/导入检查，尚不等同实际无共享VC机器上的Loader验证。具体DLL集合以构建产生的 `VC-RUNTIME.csv` 和 `NATIVE-DEPENDENCIES.txt` 为准。
 
-便携ZIP和Setup均携带同一份App-local依赖。Setup `PrivilegesRequired=lowest`，不静默运行需要提升权限的中央VC安装器。若App-local不能满足实际组件，必须记录失败并重新审核，不能吞掉错误或宣布普通用户运行成功。
+唯一 `PomodoroTimer-Portable-Windows-x64.zip` 携带完整 App-local 依赖，没有 Setup/Inno 发布路径，不运行需要提升权限的中央 VC 安装器。若 App-local 不能满足实际组件，必须记录失败并重新审核，不能吞掉错误或宣布普通用户运行成功。
 
 App-local DLL不会被Windows Update替本应用自动更新。安全修复需要重新构建、重新交付。再分发权利受微软Visual Studio许可约束，需核对用户/项目适用许可，不能将“来自微软”当成无限分发许可。
 
@@ -31,7 +31,7 @@ App-local DLL不会被Windows Update替本应用自动更新。安全修复需�
 5. 通过Process Explorer或PowerShell进程Modules记录VC DLL加载路径，区分应用目录与系统目录。
 6. 缺依赖负例：只在**另一份测试副本**移除App-local DLL；若系统仍有共享VC，不能将启动成功当成负例通过。
 7. 记录具体Loader提示、错误码、日志及事件查看器证据；测试后恢复VM快照。
-8. 用同一干净快照验证Setup不要求管理员、卸载成功。
+8. 用同一干净快照验证普通用户可写路径、搬迁整个目录（含Data/Logs）、退出后注册清理与删除；安装/卸载交付已取消。
 
 原生依赖缺失可能在SDK模块初始化、WPF OnStartup之前失败，因而没有应用日志。此时记录Windows Loader/事件查看器错误，不将“无日志”解释为没有错误。
 
@@ -42,4 +42,4 @@ App-local DLL不会被Windows Update替本应用自动更新。安全修复需�
 - [DLL再分发、许可与UAC](https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files)
 - [当前VC版本和架构规则](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
 
-**当前缺少真实25H2桌面。上述干净环境、缺失DLL、提权及安装卸载场景均为未测试。**
+**当前缺少真实25H2桌面。上述干净环境、缺失DLL、普通用户路径/搬迁/注册清理均为未测试；历史安装/卸载也未测试且已取消。**

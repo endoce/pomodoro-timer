@@ -4,4 +4,17 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../Core/PomodoroTimer.Spike.Core.csproj" /></ItemGroup>
+  <ItemGroup>
+    <!-- Compile the actual portable services, not copies or a Windows-only WPF assembly. -->
+    <Compile Include="../App/Infrastructure/PortablePaths.cs" Link="Infrastructure/PortablePaths.cs" />
+    <Compile Include="../App/Infrastructure/PersistenceDiagnostic.cs" Link="Infrastructure/PersistenceDiagnostic.cs" />
+    <Compile Include="../App/Infrastructure/AtomicJsonStore.cs" Link="Infrastructure/AtomicJsonStore.cs" />
+    <Compile Include="../App/Infrastructure/StorageTransaction.cs" Link="Infrastructure/StorageTransaction.cs" />
+    <Compile Include="../App/Infrastructure/ApplicationLog.cs" Link="Infrastructure/ApplicationLog.cs" />
+    <Compile Include="../App/Infrastructure/LogService.cs" Link="Infrastructure/LogService.cs" />
+    <Compile Include="../App/Services/SettingsStore.cs" Link="Services/SettingsStore.cs" />
+    <Compile Include="../App/Services/TimerStateStore.cs" Link="Services/TimerStateStore.cs" />
+    <Compile Include="../App/Services/TimerPersistenceSession.cs" Link="Services/TimerPersistenceSession.cs" />
+    <Compile Include="../App/Services/ExitCoordinator.cs" Link="Services/ExitCoordinator.cs" />
+  </ItemGroup>
 </Project>

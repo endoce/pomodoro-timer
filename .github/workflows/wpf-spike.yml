@@ -24,6 +24,7 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
       CONFIGURATION: Release
+      EXPECTED_COMMIT: ${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -36,112 +37,104 @@ jobs:
       - name: Validate SDK and prepare fixed Windows tools
         run: |
           $ErrorActionPreference = 'Stop'
-          if ((dotnet --version) -ne '10.0.403') { throw 'SDK does not match global.json.' }
+          if ((dotnet --version) -cne '10.0.403' -or $LASTEXITCODE -ne 0) { throw 'SDK does not match global.json.' }
           ./scripts/prepare-tools.ps1
       - name: Restore locked dependencies
         run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore Core/PomodoroTimer.Spike.Core.csproj --locked-mode
+          if ($LASTEXITCODE) { throw 'Core locked restore failed.' }
           dotnet restore Tests/PomodoroTimer.Spike.Tests.csproj --locked-mode
-          if ($LASTEXITCODE) { throw 'Core/test locked restore failed.' }
+          if ($LASTEXITCODE) { throw 'Test locked restore failed.' }
           dotnet restore App/PomodoroTimer.Spike.csproj --locked-mode
           if ($LASTEXITCODE) { throw 'App locked restore failed.' }
-      - name: Run deterministic logic tests
+      - name: Build Release Core and Tests, then run actual logic tests
         run: |
+          $ErrorActionPreference = 'Stop'
           New-Item artifacts -ItemType Directory -Force | Out-Null
-          dotnet run --project Tests/PomodoroTimer.Spike.Tests.csproj -c Release --no-restore 2>&1 | Tee-Object artifacts/LOGIC-TESTS.txt
+          dotnet build Core/PomodoroTimer.Spike.Core.csproj -c Release --no-restore -warnaserror
+          if ($LASTEXITCODE) { throw 'Core Release build failed.' }
+          dotnet build Tests/PomodoroTimer.Spike.Tests.csproj -c Release --no-restore -warnaserror
+          if ($LASTEXITCODE) { throw 'Tests Release build failed.' }
+          dotnet run --project Tests/PomodoroTimer.Spike.Tests.csproj -c Release --no-build --no-restore 2>&1 | Tee-Object artifacts/LOGIC-TESTS.txt
           if ($LASTEXITCODE) { throw 'Logic tests failed.' }
-      - name: Verify evaluated deployment properties
+          # Keep the original PASS/SKIP lines and counts; Unix skips are not Windows ACL evidence.
+          'NOT TESTED: Windows ACL validation is separate; Unix permission results do not validate Windows ACLs.' |
+            Add-Content artifacts/LOGIC-TESTS.txt -Encoding utf8
+          . ./scripts/portable-validation.ps1
+          # Uses the actual host OS; there is no release platform/skip-policy override.
+          Get-LogicTestResult "$PWD/artifacts/LOGIC-TESTS.txt" | Format-List
+      - name: Verify evaluated Release deployment properties
         run: |
-          $p = dotnet msbuild App/PomodoroTimer.Spike.csproj -getProperty:TargetFramework,RuntimeIdentifier,SelfContained,WindowsAppSDKSelfContained,WindowsPackageType | ConvertFrom-Json
+          $ErrorActionPreference = 'Stop'
+          $json = dotnet msbuild App/PomodoroTimer.Spike.csproj -p:Configuration=Release -getProperty:TargetFramework,RuntimeIdentifier,Configuration,SelfContained,WindowsAppSDKSelfContained,WindowsPackageType,PublishSingleFile,PublishTrimmed,AssemblyName
           if ($LASTEXITCODE) { throw 'Project property evaluation failed.' }
-          $expected = @{TargetFramework='net10.0-windows10.0.26100.0';RuntimeIdentifier='win-x64';SelfContained='true';WindowsAppSDKSelfContained='true';WindowsPackageType='None'}
-          foreach ($key in $expected.Keys) {
-            if ($p.Properties.$key -ne $expected[$key]) { throw "Deployment property mismatch: $key" }
-          }
-      - name: Build and publish Release x64
+          $json | Set-Content artifacts/DEPLOYMENT-PROPERTIES.json -Encoding utf8
+          . ./scripts/portable-validation.ps1
+          Assert-DeploymentProperties "$PWD/artifacts/DEPLOYMENT-PROPERTIES.json"
+      - name: Build full WPF and publish Release x64 self-contained
         run: |
-          dotnet build App/PomodoroTimer.Spike.csproj -c Release --no-restore
-          if ($LASTEXITCODE) { throw 'WPF build failed.' }
+          $ErrorActionPreference = 'Stop'
+          dotnet build App/PomodoroTimer.Spike.csproj -c Release --no-restore -warnaserror
+          if ($LASTEXITCODE) { throw 'Full WPF build failed.' }
           # RID and both self-contained modes are fixed in the app project;
-          # do not propagate CLI RID overrides to the platform-neutral Core library.
+          # do not propagate CLI RID/AssemblyName overrides to platform-neutral Core.
           dotnet publish App/PomodoroTimer.Spike.csproj -c Release --no-restore -o artifacts/publish
           if ($LASTEXITCODE) { throw 'Publish failed.' }
+          # Preserve the DLL/deps/runtimeconfig names embedded in the apphost.
+          Rename-Item -LiteralPath artifacts/publish/PomodoroTimerSpike.exe -NewName PomodoroTimer.exe
       - name: Add signed app-local VC runtime and audit dependencies
         run: |
-          Copy-Item README.md, docs/DESKTOP-ACCEPTANCE.md, docs/VC-RUNTIME.md artifacts/publish
+          $ErrorActionPreference = 'Stop'
           ./scripts/add-vc-runtime.ps1 -PublishDirectory "$PWD/artifacts/publish" -ReportDirectory "$PWD/artifacts"
           ./scripts/verify-publish.ps1 -PublishDirectory "$PWD/artifacts/publish" -ReportDirectory "$PWD/artifacts" |
             Tee-Object artifacts/PUBLISH-TESTS.txt
-      - name: Published application initialization (not desktop acceptance)
+      - name: Renamed published application initialization (not desktop acceptance)
         run: |
-          $process = Start-Process "$PWD/artifacts/publish/PomodoroTimerSpike.exe" -ArgumentList @('--self-test','--output',"`"$PWD/artifacts/INITIALIZATION-TEST.txt`"") -PassThru
+          $ErrorActionPreference = 'Stop'
+          $process = Start-Process "$PWD/artifacts/publish/PomodoroTimer.exe" -ArgumentList @('--self-test','--output',"`"$PWD/artifacts/INITIALIZATION-TEST.txt`"") -PassThru
           if (!$process.WaitForExit(60000)) { $process.Kill(); throw 'Published initialization timed out.' }
           if ($process.ExitCode -ne 0) { throw "Published initialization failed: $($process.ExitCode)" }
           Get-Content artifacts/INITIALIZATION-TEST.txt
-      - name: Summarize completed tests before artifact validation
+      - name: Summarize captured tests and test Portable validators
         run: |
           $ErrorActionPreference = 'Stop'
-          @('LOGIC-TESTS.txt','PUBLISH-TESTS.txt','INITIALIZATION-TEST.txt') | ForEach-Object {
-            Get-Content "artifacts/$_"
-          } | Set-Content artifacts/TEST-SUMMARY.txt
-          'NOT TESTED: Windows 11 25H2 window/tray/notification display/click activation/normal-user install/uninstall/sleep.' | Add-Content artifacts/TEST-SUMMARY.txt
-      - name: Build portable ZIP and user-level installer
+          ./scripts/write-test-summary.ps1 -ReportDirectory "$PWD/artifacts"
+          # Synthetic, non-runnable fixtures test validators, not a product release or desktop.
+          ./scripts/test-portable-validation.ps1 -LogicReport "$PWD/artifacts/LOGIC-TESTS.txt" |
+            Tee-Object artifacts/PIPELINE-SCRIPT-TESTS.txt
+      - name: Prepare user README, check links, generate manifest and package the single Portable ZIP
         run: |
-          # Use a stable folder name inside ZIP, not the internal publish folder name.
-          $stage = "$PWD/artifacts/stage/PomodoroTimerSpike"
-          New-Item $stage -ItemType Directory -Force | Out-Null
-          Copy-Item artifacts/publish/* $stage -Recurse -Force
-          Compress-Archive -Path $stage -DestinationPath artifacts/PomodoroTimer-WPF-Spike-Windows-x64.zip -Force
-          & ./tools/inno/ISCC.exe "/DPublishDirectory=$PWD/artifacts/publish" "/DArtifactDirectory=$PWD/artifacts" installer/spike.iss
-          if ($LASTEXITCODE) { throw 'Setup.exe generation failed.' }
-      - name: Build info, checksums and artifact tests
+          $ErrorActionPreference = 'Stop'
+          ./scripts/package-portable.ps1 -PublishDirectory "$PWD/artifacts/publish" -ArtifactDirectory "$PWD/artifacts" -ExpectedCommit $env:EXPECTED_COMMIT -WindowsSdkReport "$PWD/tools/WINDOWS-SDK-INFO.txt"
+      - name: Verify ZIP contents, reports, identity and both checksum layers
         run: |
-          @"
-          Commit SHA: ${{ github.sha }}
-          .NET SDK: $(dotnet --version)
-          .NET runtime: 10.0.14 (see published runtimeconfig and manifest)
-          Windows SDK servicing baseline: 10.0.26100.9457
-          Windows Target Platform Version: 10.0.26100.0
-          Windows managed reference package: 10.0.26100.57
-          Windows App SDK: Microsoft.WindowsAppSDK 2.6.5 Stable
-          TFM: net10.0-windows10.0.26100.0
-          RID: win-x64
-          Configuration: Release
-          .NET SelfContained: true
-          WindowsAppSDKSelfContained: true
-          WindowsPackageType: None
-          Runner: windows-2025-vs2026 (Windows Server 2025; not Windows 11 desktop)
-          Runner image: $env:ImageVersion
-          Actual build OS: $([Environment]::OSVersion.Version)
-          Installer compiler: Inno Setup 6.7.4
-          Target desktop: Windows 11 25H2 x64 26200.x, NOT TESTED
-          Built UTC: $([DateTimeOffset]::UtcNow.ToString('O'))
-          "@ | Set-Content artifacts/BUILD-INFO.txt
-          Get-Content tools/WINDOWS-SDK-INFO.txt | Add-Content artifacts/BUILD-INFO.txt
-          Get-Content artifacts/VC-RUNTIME.csv | Add-Content artifacts/BUILD-INFO.txt
-          @('PomodoroTimer-WPF-Spike-Windows-x64.zip','PomodoroTimer-WPF-Spike-Setup.exe') | ForEach-Object {
-            "$((Get-FileHash "artifacts/$_" -Algorithm SHA256).Hash.ToLowerInvariant())  $_"
-          } | Set-Content artifacts/SHA256SUMS.txt
-          ./scripts/verify-artifacts.ps1 -ArtifactDirectory "$PWD/artifacts" | Tee-Object artifacts/ARTIFACT-TESTS.txt
-          Get-Content artifacts/ARTIFACT-TESTS.txt | Add-Content artifacts/TEST-SUMMARY.txt
-      - name: Upload validation artifact (30 days)
+          $ErrorActionPreference = 'Stop'
+          ./scripts/verify-artifacts.ps1 -ArtifactDirectory "$PWD/artifacts" -ExpectedCommit $env:EXPECTED_COMMIT |
+            Tee-Object artifacts/ARTIFACT-TESTS.txt
+          # Keep the verification result separate from TEST-SUMMARY to avoid a hash cycle.
+          . ./scripts/portable-validation.ps1
+          Write-FileChecksums "$PWD/artifacts" ($PortableEvidenceFiles + $PortableZipName + 'ARTIFACT-TESTS.txt' + 'PIPELINE-SCRIPT-TESTS.txt') "$PWD/artifacts/SHA256SUMS.txt"
+          ./scripts/verify-artifacts.ps1 -ArtifactDirectory "$PWD/artifacts" -ExpectedCommit $env:EXPECTED_COMMIT -RequireVerificationReport
+      - name: Upload the single validated Portable artifact (30 days)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: PomodoroTimer-WPF-Spike-Windows-x64
+          name: PomodoroTimer-Portable-Windows-x64
           retention-days: 30
           if-no-files-found: error
           path: |
-            spikes/wpf-risk-validation/artifacts/*.zip
-            spikes/wpf-risk-validation/artifacts/*.exe
-            spikes/wpf-risk-validation/artifacts/*.txt
-            spikes/wpf-risk-validation/artifacts/*.csv
-      - name: Upload failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: WPF-Spike-Failure-Diagnostics
-          retention-days: 30
-          if-no-files-found: warn
-          path: |
-            spikes/wpf-risk-validation/artifacts/*.txt
-            spikes/wpf-risk-validation/tools/WINDOWS-SDK-INFO.txt
-            C:/Users/runneradmin/AppData/Local/PomodoroTimerSpike/logs/*.log
+            spikes/wpf-risk-validation/artifacts/PomodoroTimer-Portable-Windows-x64.zip
+            spikes/wpf-risk-validation/artifacts/SHA256SUMS.txt
+            spikes/wpf-risk-validation/artifacts/BUILD-INFO.txt
+            spikes/wpf-risk-validation/artifacts/TEST-SUMMARY.txt
+            spikes/wpf-risk-validation/artifacts/LOGIC-TESTS.txt
+            spikes/wpf-risk-validation/artifacts/PUBLISH-TESTS.txt
+            spikes/wpf-risk-validation/artifacts/INITIALIZATION-TEST.txt
+            spikes/wpf-risk-validation/artifacts/DEPLOYMENT-PROPERTIES.json
+            spikes/wpf-risk-validation/artifacts/PUBLISH-MANIFEST.csv
+            spikes/wpf-risk-validation/artifacts/NATIVE-DEPENDENCIES.txt
+            spikes/wpf-risk-validation/artifacts/VC-RUNTIME.csv
+            spikes/wpf-risk-validation/artifacts/VC-RUNTIME.txt
+            spikes/wpf-risk-validation/artifacts/WINDOWS-SDK-INFO.txt
+            spikes/wpf-risk-validation/artifacts/ARTIFACT-TESTS.txt
+            spikes/wpf-risk-validation/artifacts/PIPELINE-SCRIPT-TESTS.txt

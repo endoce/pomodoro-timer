@@ -31,19 +31,4 @@ if (!(Test-Path "$kits\bin\10.0.26100.0\x64\rc.exe")) { throw '26100 platform bu
 $products | Select-Object DisplayName, DisplayVersion | Format-List | Out-String |
     Set-Content (Join-Path $ToolsDirectory 'WINDOWS-SDK-INFO.txt')
 
-# Pin the compiler download as well as its vendor's Authenticode identity.
-$inno = Join-Path $ToolsDirectory 'innosetup-6.7.4.exe'
-Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile $inno
-$hash = (Get-FileHash $inno -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($hash -ne 'a549929319f9120716677c685535ca4671e4b937b5fdc87e2585f32d8eb30e8c') {
-    throw 'Inno Setup installer SHA256 mismatch.'
-}
-$signature = Get-AuthenticodeSignature $inno
-if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Pyrsys') {
-    throw 'Inno Setup publisher signature mismatch.'
-}
-$innoDirectory = Join-Path $ToolsDirectory 'inno'
-$process = Start-Process $inno -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$innoDirectory`"") -Wait -PassThru
-if ($process.ExitCode -ne 0) { throw "Inno Setup installation failed: $($process.ExitCode)" }
-if (!(Test-Path (Join-Path $innoDirectory 'ISCC.exe'))) { throw 'ISCC.exe missing.' }
-Write-Output 'Fixed Windows SDK and Inno Setup compiler verified.'
+Write-Output 'Fixed Windows SDK verified; Portable delivery requires no installer compiler.'
